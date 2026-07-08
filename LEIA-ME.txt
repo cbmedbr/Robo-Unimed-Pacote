@@ -1,0 +1,45 @@
+=============================================
+  ROBO UNIMED - AUTORIZACAO + EXECUCAO
+  Clinica Luciano Noceti
+=============================================
+
+CONTEUDO:
+  servidor-local/     - Servidor HTTP que recebe comandos do CRM
+  unimed-mvp-final/   - Robo Playwright (Chrome automatizado)
+  instalar.bat        - Script de instalacao (rodar 1x no PC novo)
+  iniciar.bat         - Script para iniciar o servidor (rodar todo dia)
+
+REQUISITOS DO PC:
+  - Node.js v18+ instalado (https://nodejs.org)
+  - Google Chrome instalado
+  - Webcam funcionando (para QR Code)
+  - Acesso a internet
+
+INSTALACAO (1x):
+  1. Copie esta pasta inteira para C:\Robo-Unimed\ no PC destino
+  2. Execute instalar.bat como administrador
+  3. Copie o arquivo .env do PC atual para servidor-local\.env
+     (contem senhas do Supabase e Unimed — NAO compartilhe)
+
+USO DIARIO:
+  1. Execute iniciar.bat (ou: cd servidor-local && npm run dev)
+  2. Deixe a janela do terminal aberta (pode minimizar)
+  3. Use o CRM normalmente — os botoes "Executar" e "Disparar"
+     chamam o robo automaticamente
+
+DOIS ROBOS:
+  - AUTORIZACAO: cria guias novas no portal Unimed
+    Endpoint: POST /executar
+    Acionado pela aba "Renovacao" no CRM
+
+  - EXECUCAO: marca sessoes como realizadas no portal Unimed
+    Endpoint: POST /executar-sessao
+    Acionado pela aba "Aguardando Execucao" no CRM
+    Requer QR Code do paciente (webcam)
+
+PROBLEMAS COMUNS:
+  - "Robo offline" no CRM → verificar se iniciar.bat esta rodando
+  - "Playwright not found" → rodar: npx playwright install chromium
+  - "Permissao da webcam" → na primeira execucao, clicar "Permitir"
+    quando o Chrome perguntar
+  - Erros de login → verificar UNIMED_USUARIO e UNIMED_SENHA no .env

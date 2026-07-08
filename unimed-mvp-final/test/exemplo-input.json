@@ -1,0 +1,23 @@
+{
+  "paciente": {
+    "nome": "VINICIUS VIEIRA ALMEIDA",
+    "carteirinha_raw": "00255007001295009",
+    "tipo": "LOCAL",
+    "telefone": "48991066363",
+    "email": "viniciusalmeida.am@gmail.com"
+  },
+  "medico_solicitante": {
+    "nome": "MARCELO HENRIQUE MASCARELLO DAROZ",
+    "uf_crm": "SC",
+    "numero_crm": "43127"
+  },
+  "cid": "G60.8",
+  "indicacao_clinica_formatada": "CID G60.8",
+  "procedimento": {
+    "tipo": "TIPICO",
+    "codigo": "50000470",
+    "quantidade_solicitada": 5
+  },
+  "especialidade_pedido": "PSICOLOGIA",
+  "pedido_medico_path": "./pedidos-teste/pedido_exemplo.pdf"
+}

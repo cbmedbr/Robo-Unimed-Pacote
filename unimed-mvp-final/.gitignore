@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+screenshots/*.png
+pedidos-teste/*.pdf
+pedidos-teste/*.jpg
+pedidos-teste/*.jpeg
+pedidos-teste/*.png
+*.log
+.DS_Store

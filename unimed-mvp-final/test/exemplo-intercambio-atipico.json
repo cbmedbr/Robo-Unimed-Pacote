@@ -1,0 +1,23 @@
+{
+  "paciente": {
+    "nome": "PACIENTE EXEMPLO INTERCAMBIO",
+    "carteirinha_raw": "0970.0022.007065.47-8",
+    "tipo": "INTERCAMBIO",
+    "telefone": "48988888888",
+    "email": "exemplo@example.com"
+  },
+  "medico_solicitante": {
+    "nome": "MARCELO HENRIQUE MASCARELLO DAROZ",
+    "uf_crm": "SC",
+    "numero_crm": "43127"
+  },
+  "cid": "F84.0",
+  "indicacao_clinica_formatada": "CID F84.0",
+  "procedimento": {
+    "tipo": "ATIPICO",
+    "codigo": "2250005103",
+    "quantidade_solicitada": 10
+  },
+  "especialidade_pedido": "PSICOLOGIA",
+  "pedido_medico_path": "./pedidos-teste/pedido_exemplo.pdf"
+}
