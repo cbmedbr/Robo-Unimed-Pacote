@@ -533,6 +533,20 @@ async function fluxoBeneficiarioLocal(
 
   await page.waitForLoadState("networkidle");
 
+  // Verifica se há restrição administrativa
+  const restricaoLocal = await page
+    .locator('text=/restri.*administrativ|n.*o liberada pela Unimed/i')
+    .first()
+    .isVisible({ timeout: 2000 })
+    .catch(() => false);
+
+  if (restricaoLocal) {
+    const msg = await page.locator('.MagnetoErrorDataTD, td[class*="Error"], div[class*="error"]')
+      .first().textContent({ timeout: 2000 }).catch(() => "Restrição administrativa detectada");
+    logger.error({ mensagem: msg?.trim() }, "beneficiário LOCAL com RESTRIÇÃO ADMINISTRATIVA");
+    throw new Error(`BENEFICIARIO_RESTRICAO: ${msg?.trim()}`);
+  }
+
   // Verifica se beneficiário foi encontrado (busca pelo nome do paciente na página)
   try {
     await page.waitForSelector(`text=${input.paciente.nome}`, {
@@ -651,6 +665,20 @@ async function fluxoBeneficiarioIntercambio(
       if (p.isClosed()) continue;
 
       try {
+        // Cenário RESTRIÇÃO: beneficiário com restrição administrativa
+        const restricao = await p
+          .locator('text=/restri.*administrativ|n.*o liberada pela Unimed/i')
+          .first()
+          .isVisible({ timeout: 300 })
+          .catch(() => false);
+
+        if (restricao) {
+          const msg = await p.locator('.MagnetoErrorDataTD, td[class*="Error"], div[class*="error"], div[class*="alert"]')
+            .first().textContent({ timeout: 2000 }).catch(() => "Restrição administrativa detectada");
+          logger.error({ url: p.url(), mensagem: msg?.trim() }, "beneficiário com RESTRIÇÃO ADMINISTRATIVA");
+          throw new Error(`BENEFICIARIO_RESTRICAO: ${msg?.trim()}`);
+        }
+
         // Cenário A: paciente novo — tela "Cadastrar beneficiário externo"
         const telaNovoVisivel = await p
           .locator('text=/Cadastrar benefici|externo sem cart/i')
