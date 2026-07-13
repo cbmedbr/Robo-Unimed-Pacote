@@ -225,35 +225,9 @@ async function preencherCamposBasicos(
   // ATENÇÃO: o portal valida que o telefone/email NÃO pode ser do prestador.
   // Só preenche se houver telefone real do paciente. Placeholders e valores
   // genéricos (ex: 48999999999, "example.com") fazem a guia ser rejeitada.
-  const telefonePlaceholders = ["48999999999", "00000000000", "11111111111", "99999999999"];
+  // Campo Celular não é obrigatório — deixa em branco para evitar erro de validação de máscara
   const telRaw = (input.paciente.telefone || "").replace(/\D/g, "");
-  if (telRaw && telRaw.length >= 10 && !telefonePlaceholders.includes(telRaw)) {
-    // Preenche Telefone fixo (obrigatório no SGU)
-    try {
-      const telFixoSel = page.locator('#nr_fone').first();
-      if (await telFixoSel.isVisible({ timeout: 1000 }).catch(() => false)) {
-        await telFixoSel.click();
-        await telFixoSel.fill("");
-        await telFixoSel.pressSequentially(telRaw, { delay: 30 });
-        await telFixoSel.press("Tab");
-        logger.info({ telefone: telRaw }, "campo Telefone fixo preenchido");
-      }
-    } catch (err) {
-      logger.warn({ err: (err as Error).message }, "campo Telefone fixo não preenchido");
-    }
-    // Preenche Celular SMS
-    try {
-      await page.locator('#nr_celular').click();
-      await page.locator('#nr_celular').fill("");
-      await page.locator('#nr_celular').pressSequentially(telRaw, { delay: 30 });
-      await page.locator('#nr_celular').press("Tab");
-      logger.info({ telefone: telRaw }, "campo Celular preenchido");
-    } catch (err) {
-      logger.warn({ err: (err as Error).message }, "campo Celular (SMS) não preenchido");
-    }
-  } else {
-    logger.info({ telefoneRecebido: telRaw }, "campos Telefone/Celular deixados em branco (placeholder ou ausente)");
-  }
+  logger.info({ telefoneRecebido: telRaw }, "campo Celular deixado em branco (campo não obrigatório)");
 
   // E-mail — id="ds_email"
   // Mesma lógica: só preenche se for e-mail real do paciente
