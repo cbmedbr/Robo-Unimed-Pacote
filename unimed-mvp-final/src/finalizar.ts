@@ -337,59 +337,51 @@ async function garantirProfissionalExecutante(page: Page, config: Config, input:
   const nomeBusca = input.psicologo_executante_nome;
   logger.info({ nomeBusca }, "garantindo profissional executante");
 
-  try {
-    // Acha dinamicamente o select que tem opção com o nome do psicólogo
-    const resultado = await page.evaluate((nome: string) => {
-      const termos = nome.toUpperCase().split(/\s+/);
-      const selects = Array.from(document.querySelectorAll('select'));
-      for (const sel of selects) {
-        const match = Array.from(sel.options).find(
-          (o) => termos.every(t => o.text.toUpperCase().includes(t))
-        );
-        if (match) {
-          return {
-            name: sel.getAttribute('name'),
-            id: sel.getAttribute('id'),
-            value: match.value,
-            text: match.text,
-          };
-        }
-      }
-      return null;
-    }, nomeBusca);
-
-    if (!resultado) {
-      // CRÍTICO: não pode continuar com executante errado (SGU default = primeiro da lista)
-      throw new Error(
-        `FINALIZACAO_FALHOU: profissional executante "${nomeBusca}" não encontrado no select do SGU. ` +
-        `Verifique se o psicólogo está cadastrado como profissional na Unimed.`
+  // Acha dinamicamente o select que tem opção com o nome do psicólogo
+  const resultado = await page.evaluate((nome: string) => {
+    const termos = nome.toUpperCase().split(/\s+/);
+    const selects = Array.from(document.querySelectorAll('select'));
+    for (const sel of selects) {
+      const match = Array.from(sel.options).find(
+        (o) => termos.every(t => o.text.toUpperCase().includes(t))
       );
-    } else {
-      logger.info({ resultado }, "select do profissional executante encontrado");
-      // Seleciona pelo seletor mais específico disponível
-      const seletor = resultado.id
-        ? `#${resultado.id}`
-        : `select[name="${resultado.name}"]`;
-      await page.locator(seletor).selectOption({ value: resultado.value });
-      logger.info({ seletor, value: resultado.value, text: resultado.text }, "profissional executante selecionado");
-
-      // Aguarda Botao_Finalizar aparecer (fica oculto até escolher executante)
-      await page.waitForFunction(
-        () => {
-          const btn = document.querySelector('#Botao_Finalizar') as HTMLInputElement | null;
-          if (!btn) return false;
-          const rect = btn.getBoundingClientRect();
-          return rect.width > 0 && rect.height > 0;
-        },
-        { timeout: 10000 }
-      ).catch(() => {
-        logger.warn("Botao_Finalizar não apareceu após selecionar executante");
-      });
+      if (match) {
+        return {
+          name: sel.getAttribute('name'),
+          id: sel.getAttribute('id'),
+          value: match.value,
+          text: match.text,
+        };
+      }
     }
-  } catch (err) {
-    logger.warn(
-      { err: (err as Error).message },
-      "não conseguiu definir profissional executante"
+    return null;
+  }, nomeBusca);
+
+  if (!resultado) {
+    // CRÍTICO: não pode continuar com executante errado (SGU default = primeiro da lista)
+    throw new Error(
+      `FINALIZACAO_FALHOU: profissional executante "${nomeBusca}" não encontrado no select do SGU. ` +
+      `Verifique se o psicólogo está cadastrado como profissional na Unimed.`
     );
   }
+
+  logger.info({ resultado }, "select do profissional executante encontrado");
+  const seletor = resultado.id
+    ? `#${resultado.id}`
+    : `select[name="${resultado.name}"]`;
+  await page.locator(seletor).selectOption({ value: resultado.value });
+  logger.info({ seletor, value: resultado.value, text: resultado.text }, "profissional executante selecionado");
+
+  // Aguarda Botao_Finalizar aparecer (fica oculto até escolher executante)
+  await page.waitForFunction(
+    () => {
+      const btn = document.querySelector('#Botao_Finalizar') as HTMLInputElement | null;
+      if (!btn) return false;
+      const rect = btn.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    },
+    { timeout: 10000 }
+  ).catch(() => {
+    logger.warn("Botao_Finalizar não apareceu após selecionar executante");
+  });
 }
