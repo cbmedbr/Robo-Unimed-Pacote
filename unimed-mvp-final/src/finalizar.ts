@@ -340,7 +340,7 @@ async function garantirProfissionalExecutante(page: Page, config: Config, input:
   // Acha dinamicamente o select que tem opção com o nome do psicólogo
   // Normaliza acentos (CRM pode ter "Débora", SGU tem "DEBORA")
   const resultado = await page.evaluate((nome: string) => {
-    const strip = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+    const strip = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
     const termos = strip(nome).split(/\s+/);
     const selects = Array.from(document.querySelectorAll('select'));
     for (const sel of selects) {
