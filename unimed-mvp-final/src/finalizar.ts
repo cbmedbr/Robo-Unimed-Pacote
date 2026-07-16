@@ -339,14 +339,32 @@ async function garantirProfissionalExecutante(page: Page, config: Config, input:
 
   // Acha dinamicamente o select que tem opção com o nome do psicólogo
   // Normaliza acentos (CRM pode ter "Débora", SGU tem "DEBORA")
-  const resultado = await page.evaluate((nome: string) => {
-    const strip = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
-    const termos = strip(nome).split(/\s+/);
-    const selects = Array.from(document.querySelectorAll('select'));
-    for (const sel of selects) {
-      const match = Array.from(sel.options).find(
-        (o) => termos.every(t => strip(o.text).includes(t))
-      );
+  // Normaliza fora do evaluate e passa os termos já prontos
+  const stripAccents = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  const termosNormalizados = stripAccents(nomeBusca).split(/\s+/);
+
+  const resultado = await page.evaluate((termos) => {
+    function strip(s) { return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase(); }
+    var selects = document.querySelectorAll('select');
+    for (var i = 0; i < selects.length; i++) {
+      var sel = selects[i];
+      for (var j = 0; j < sel.options.length; j++) {
+        var o = sel.options[j];
+        var textoNorm = strip(o.text);
+        var ok = true;
+        for (var k = 0; k < termos.length; k++) {
+          if (textoNorm.indexOf(termos[k]) === -1) { ok = false; break; }
+        }
+        if (ok) {
+          return {
+            name: sel.getAttribute('name'),
+            id: sel.getAttribute('id'),
+            value: o.value,
+            text: o.text,
+          };
+        }
+      }
+    }
       if (match) {
         return {
           name: sel.getAttribute('name'),
@@ -357,7 +375,7 @@ async function garantirProfissionalExecutante(page: Page, config: Config, input:
       }
     }
     return null;
-  }, nomeBusca);
+  }, termosNormalizados);
 
   if (!resultado) {
     // CRÍTICO: não pode continuar com executante errado (SGU default = primeiro da lista)
