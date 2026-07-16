@@ -365,15 +365,6 @@ async function garantirProfissionalExecutante(page: Page, config: Config, input:
         }
       }
     }
-      if (match) {
-        return {
-          name: sel.getAttribute('name'),
-          id: sel.getAttribute('id'),
-          value: match.value,
-          text: match.text,
-        };
-      }
-    }
     return null;
   }, termosNormalizados);
 
