@@ -182,6 +182,48 @@ export async function executarSessaoJob(
         comprovante_url: resultado.comprovante_path || null,
         duracao_ms: resultado.duracao_ms || (Date.now() - inicioMs),
       });
+
+      // Marcar agendamento como executado no CRM
+      // Enum status_execucao: aguardando_execucao → executado
+      const { error: agErr } = await supabase
+        .from("agendamentos")
+        .update({ status_execucao: "executado" })
+        .eq("id", dados.sessao_id);
+
+      if (agErr) {
+        console.error(`[exec-${jobId}] Erro ao marcar agendamento como executado:`, agErr.message);
+      } else {
+        console.log(`[exec-${jobId}] Agendamento ${dados.sessao_id} status_execucao → executado`);
+      }
+
+      // Incrementar sessoes_executadas na guia
+      const { data: agData } = await supabase
+        .from("agendamentos")
+        .select("guia_id")
+        .eq("id", dados.sessao_id)
+        .maybeSingle();
+
+      if (agData?.guia_id) {
+        // Lê valor atual e incrementa
+        const { data: guiaData } = await supabase
+          .from("guias")
+          .select("sessoes_executadas")
+          .eq("id", agData.guia_id)
+          .maybeSingle();
+
+        const atual = guiaData?.sessoes_executadas ?? 0;
+        const { error: guiaErr } = await supabase
+          .from("guias")
+          .update({ sessoes_executadas: atual + 1 })
+          .eq("id", agData.guia_id);
+
+        if (guiaErr) {
+          console.warn(`[exec-${jobId}] Erro ao incrementar sessoes_executadas:`, guiaErr.message);
+        } else {
+          console.log(`[exec-${jobId}] Guia ${agData.guia_id} sessoes_executadas: ${atual} → ${atual + 1}`);
+        }
+      }
+
       console.log(`[exec-${jobId}] ✅ Sessão executada com sucesso`);
     } else {
       await atualizarStatus(jobId, "falhou", {

@@ -7,12 +7,16 @@ import { RoboError } from "./tipos";
  *
  * O SGU pode usar seletores diferentes dependendo do tipo de guia
  * (local vs intercâmbio). Tenta múltiplos seletores em ordem.
+ *
+ * Para guias em série (procedimento seriado), não há popup de cartão —
+ * o formulário de execução já está na página principal. Nesse caso
+ * retorna { page: pagina atual, serie: true }.
  */
 export async function abrirPopupCartao(
   page: Page,
   context: BrowserContext,
   timeout: number
-): Promise<Page> {
+): Promise<{ page: Page; serie: boolean }> {
   logger.info({ url: page.url() }, "clicando 'Adicionar Execução Cartão'");
 
   // Salva dump HTML + screenshot para diagnóstico
@@ -30,17 +34,34 @@ export async function abrirPopupCartao(
   }
 
   // Detectar bloqueios do SGU antes de tentar clicar
-  const textoBody = await page.textContent("body").catch(() => "") || "";
+  // IMPORTANTE: só bloqueia se a mensagem estiver VISÍVEL — o SGU mantém
+  // a <tr id="trLembreteSemItens"> oculta (display:none) quando há itens.
+  // textContent("body") pega texto de elementos ocultos → falso positivo.
+  const semItensVisivel = await page.evaluate(() => {
+    const el = document.getElementById('trLembreteSemItens');
+    if (!el) return false;
+    return el.style.display !== 'none' && el.offsetParent !== null;
+  });
 
-  if (textoBody.includes("Não há itens disponíveis para execução")) {
-    logger.error("SGU bloqueou: 'Não há itens disponíveis para execução'");
+  if (semItensVisivel) {
+    logger.error("SGU bloqueou: 'Não há itens disponíveis para execução' (elemento visível)");
     throw new RoboError(
       "SEM_ITENS_EXECUCAO",
       "Portal Unimed bloqueou: 'Não há itens disponíveis para execução'. Possíveis causas: guia de intercâmbio sem liberação do prestador local, profissional executante sem credenciamento, ou todas as sessões já executadas."
     );
   }
 
-  if (textoBody.includes("não possui itens liberados para execução")) {
+  const semLiberacaoVisivel = await page.evaluate(() => {
+    const els = document.querySelectorAll('td.MagnetoLembreteDataTD, td.MagnetoErrorDataTD');
+    for (const el of els) {
+      const htmlEl = el as HTMLElement;
+      if (htmlEl.offsetParent === null) continue;
+      if (htmlEl.textContent?.includes('não possui itens liberados para execução')) return true;
+    }
+    return false;
+  });
+
+  if (semLiberacaoVisivel) {
     logger.error("SGU bloqueou: 'Contratado executante não possui itens liberados para execução'");
     throw new RoboError(
       "SEM_ITENS_EXECUCAO",
@@ -72,6 +93,42 @@ export async function abrirPopupCartao(
   }
 
   if (!seletorEncontrado) {
+    // Verifica se é guia em série — o formulário já está na página, sem popup
+    const isSerie = await page.evaluate(() => {
+      const el = document.querySelector('input[id="is_serie_1"]') as HTMLInputElement | null;
+      return el?.value === '1';
+    });
+
+    if (isSerie) {
+      // Guia em série: o botão "Gravar e Finalizar" já está na página
+      const temBotaoGravar = await page.locator('#Button_Submit').isVisible({ timeout: 2000 }).catch(() => false);
+      if (temBotaoGravar) {
+        logger.info("guia em série detectada — formulário de execução já está na página (sem popup)");
+        return { page, serie: true };
+      }
+    }
+
+    // Verifica se Qtde na tabela de procedimentos é 0 → sessões esgotadas
+    const qtdeZero = await page.evaluate(() => {
+      const cells = document.querySelectorAll('td');
+      for (const td of cells) {
+        const text = (td as HTMLElement).textContent?.trim();
+        if (text === '0') {
+          const prev = td.previousElementSibling;
+          if (prev && /\d+\s*\/\s*\d+/.test(prev.textContent || '')) return true;
+        }
+      }
+      return false;
+    });
+
+    if (qtdeZero) {
+      logger.error("sessões esgotadas: Qtde = 0 na tabela de procedimentos");
+      throw new RoboError(
+        "SESSOES_ESGOTADAS",
+        "Todas as sessões autorizadas desta guia já foram executadas (Qtde = 0). Não há itens disponíveis para nova execução."
+      );
+    }
+
     // Dump dos links visíveis para diagnóstico
     const links = await page.locator("a:visible").allTextContents().catch(() => []);
     const botoes = await page.locator("input[type='button']:visible, button:visible").allTextContents().catch(() => []);
@@ -113,5 +170,5 @@ export async function abrirPopupCartao(
   await popup.waitForLoadState("domcontentloaded");
   logger.info({ url: popup.url() }, "popup do cartão aberto");
 
-  return popup;
+  return { page: popup, serie: false };
 }
