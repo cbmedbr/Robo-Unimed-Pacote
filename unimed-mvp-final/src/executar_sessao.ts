@@ -113,13 +113,13 @@ export async function executarSessao(
       }
 
       // Formatar data/hora da sessão: dd/MM/yyyy HH:mm
-      const dataExec = new Date(dados.data_execucao + "T12:00:00");
+      // data_execucao pode vir como "2026-07-17" ou "2026-07-17T14:00:00.000Z"
+      const dataExec = new Date(dados.data_execucao.includes("T") ? dados.data_execucao : dados.data_execucao + "T12:00:00");
       const dd = String(dataExec.getDate()).padStart(2, "0");
       const mm = String(dataExec.getMonth() + 1).padStart(2, "0");
       const yyyy = dataExec.getFullYear();
-      const agora = new Date();
-      const hh = String(agora.getHours()).padStart(2, "0");
-      const min = String(agora.getMinutes()).padStart(2, "0");
+      const hh = String(dataExec.getHours()).padStart(2, "0");
+      const min = String(dataExec.getMinutes()).padStart(2, "0");
       const dataHoraSerie = `${dd}/${mm}/${yyyy} ${hh}:${min}`;
 
       const campoId = `dt_serie_${proximoCampo}`;
