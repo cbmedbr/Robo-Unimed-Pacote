@@ -25,6 +25,7 @@ export interface DadosExecucaoSessao {
     carteirinha: string;
   };
   data_execucao: string;
+  qrcode_valor?: string | null;
 }
 
 interface ResultadoExecucao {
@@ -185,9 +186,17 @@ export async function executarSessaoJob(
 
       // Marcar agendamento como executado no CRM
       // Enum status_execucao: aguardando_execucao → executado
+      const agUpdate: Record<string, unknown> = {
+        status_execucao: "executado",
+        data_execucao: new Date().toISOString(),
+        executado_por: "Robô Unimed",
+      };
+      if (dados.qrcode_valor) {
+        agUpdate.token_execucao = dados.qrcode_valor;
+      }
       const { error: agErr } = await supabase
         .from("agendamentos")
-        .update({ status_execucao: "executado" })
+        .update(agUpdate)
         .eq("id", dados.sessao_id);
 
       if (agErr) {
