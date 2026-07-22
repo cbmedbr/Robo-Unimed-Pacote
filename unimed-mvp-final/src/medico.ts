@@ -696,18 +696,39 @@ async function preencherCBO(page: Page, config: Config): Promise<void> {
 
   await pageCBO.waitForLoadState("domcontentloaded").catch(() => {});
   await pageCBO.waitForLoadState("networkidle").catch(() => {});
-  await new Promise((r) => setTimeout(r, 1000));
+  await new Promise((r) => setTimeout(r, 3000));
 
-  // Preenche código 2251 — busca input editável (não readonly)
-  const inputCodCBO = pageCBO.locator('input[type="text"]:not([readonly])').first();
-  const temInput = await inputCodCBO.isVisible({ timeout: 3000 }).catch(() => false);
-  if (temInput) {
-    await inputCodCBO.fill("2251");
-    logger.info("código CBO 2251 preenchido na popup");
+  // Aguarda qualquer input aparecer no DOM antes de tentar interagir
+  await pageCBO.waitForSelector('input', { timeout: 15000 }).catch(() => {
+    logger.warn("nenhum input encontrado no popup CBO após 15s");
+  });
+
+  // Tenta localizar input editável de forma ampla via evaluate
+  const inputInfo = await pageCBO.evaluate(() => {
+    const inputs = Array.from(document.querySelectorAll('input'));
+    for (const inp of inputs) {
+      const tipo = (inp.getAttribute('type') || 'text').toLowerCase();
+      if (['text', 'search', ''].includes(tipo) && !inp.readOnly && !inp.disabled) {
+        return { name: inp.name, id: inp.id, type: inp.type || 'text', tagName: inp.tagName };
+      }
+    }
+    // fallback: primeiro input qualquer
+    const primeiro = inputs[0];
+    return primeiro ? { name: primeiro.name, id: primeiro.id, type: primeiro.type, tagName: primeiro.tagName } : null;
+  });
+
+  logger.info({ inputInfo }, "inputs detectados no popup CBO");
+
+  if (inputInfo && inputInfo.id) {
+    await pageCBO.locator(`#${inputInfo.id}`).fill("2251");
+    logger.info({ seletor: `#${inputInfo.id}` }, "código CBO 2251 preenchido pelo id");
+  } else if (inputInfo && inputInfo.name) {
+    await pageCBO.locator(`input[name="${inputInfo.name}"]`).fill("2251");
+    logger.info({ seletor: `input[name="${inputInfo.name}"]` }, "código CBO 2251 preenchido pelo name");
   } else {
-    // Fallback: qualquer input de texto
-    await pageCBO.locator('input[type="text"]').first().fill("2251");
-    logger.info("código CBO 2251 preenchido (fallback primeiro input)");
+    // Fallback final: primeiro input visível
+    await pageCBO.locator('input').first().fill("2251");
+    logger.info("código CBO 2251 preenchido (fallback input genérico)");
   }
 
   // Clica Consultar
