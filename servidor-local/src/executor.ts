@@ -98,7 +98,7 @@ async function jobParaInputRobo(job: UnimedJob): Promise<{
   let ufCrm = job.medico_uf_snapshot;
 
   // Formato "XX/NNNNN" → separar código UF e número
-  const matchCrm = numeroCrm.match(/^(\d{1,2})\s*[\/\-]\s*(\d{4,})$/);
+  const matchCrm = numeroCrm.match(/^(\d{1,2})\s*[\/\-]\s*(\d{3,})$/);
   if (matchCrm) {
     const codigoUf = matchCrm[1].padStart(2, "0");
     const ufConvertida = UF_POR_CODIGO[codigoUf];

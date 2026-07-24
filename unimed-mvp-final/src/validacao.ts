@@ -6,7 +6,7 @@ import { logger } from "./utils/logger";
 const EXTENSOES_VALIDAS = [".pdf", ".jpg", ".jpeg", ".png", ".gif", ".doc", ".xls"];
 const TAMANHO_MAX_BYTES = 5 * 1024 * 1024; // 5 MB
 const REGEX_CID = /^[A-Z]\d{2}(\.\d{1,2})?$/;
-const REGEX_CRM = /^\d{4,}$/;
+const REGEX_CRM = /^\d+$/;
 const REGEX_UF = /^[A-Z]{2}$/;
 
 /**
@@ -73,7 +73,7 @@ export function validarInput(input: InputAutorizacao): void {
   if (!REGEX_CRM.test(input.medico_solicitante.numero_crm)) {
     throw new ErroValidacao(
       "MEDICO_DADOS_INVALIDOS",
-      `numero_crm deve ter apenas dígitos (≥4), recebido: "${input.medico_solicitante.numero_crm}"`
+      `numero_crm deve ter apenas dígitos, recebido: "${input.medico_solicitante.numero_crm}"`
     );
   }
 
