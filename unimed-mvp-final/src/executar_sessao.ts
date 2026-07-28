@@ -159,44 +159,53 @@ export async function executarSessao(
       await page.locator('#Button_Submit').click({ timeout: 10000 });
       logger.info("clicou 'Gravar e Finalizar'");
 
-      // Aguarda a página finalizar_msg.do aparecer
-      await new Promise((r) => setTimeout(r, 3000));
-
-      // Busca e clica "Confirmar" na página finalizar_msg.do
-      let confirmouMsg = false;
-      for (const p of context.pages()) {
-        if (p.isClosed()) continue;
-        if (p.url().includes("finalizar_msg")) {
-          logger.info({ url: p.url() }, "página finalizar_msg detectada");
-          await p.waitForLoadState("domcontentloaded").catch(() => {});
-
-          const botoesConfirmar = [
-            'input[value="Confirmar"]',
-            'button:has-text("Confirmar")',
-            'input[type="submit"]',
-            'input[type="button"]',
-          ];
-
-          for (const sel of botoesConfirmar) {
-            const visivel = await p.locator(sel).first().isVisible({ timeout: 2000 }).catch(() => false);
-            if (visivel) {
-              logger.info({ seletor: sel }, "clicando Confirmar na finalizar_msg");
-              await p.locator(sel).first().click();
-              confirmouMsg = true;
-              break;
-            }
+      // Polling: aguarda finalizar_msg.do aparecer em qualquer página (até 15s)
+      let paginaMsg: import("playwright").Page | null = null;
+      const inicioMsg = Date.now();
+      while (Date.now() - inicioMsg < 15000) {
+        for (const p of context.pages()) {
+          if (p.isClosed()) continue;
+          if (p.url().includes("finalizar_msg")) {
+            paginaMsg = p;
+            break;
           }
-          break;
+        }
+        if (paginaMsg) break;
+        await new Promise((r) => setTimeout(r, 500));
+      }
+
+      let confirmouMsg = false;
+      if (paginaMsg) {
+        logger.info({ url: paginaMsg.url() }, "página finalizar_msg detectada");
+        await paginaMsg.waitForLoadState("domcontentloaded", { timeout: 10000 }).catch(() => {});
+        // Registra handler de dialog na página intermediária
+        registrarDialogHandler(paginaMsg);
+
+        const botoesConfirmar = [
+          'input[value="Confirmar"]',
+          'button:has-text("Confirmar")',
+          'input[type="submit"]',
+          'input[type="button"]',
+        ];
+
+        for (const sel of botoesConfirmar) {
+          const visivel = await paginaMsg.locator(sel).first().isVisible({ timeout: 3000 }).catch(() => false);
+          if (visivel) {
+            logger.info({ seletor: sel }, "clicando Confirmar na finalizar_msg");
+            await paginaMsg.locator(sel).first().click();
+            confirmouMsg = true;
+            break;
+          }
         }
       }
 
       if (confirmouMsg) {
         logger.info("confirmação clicada — aguardando portal processar");
       } else {
-        logger.warn("página finalizar_msg não encontrada ou sem botão Confirmar");
+        logger.error("página finalizar_msg não encontrada ou sem botão Confirmar");
       }
 
-      // Aguarda processamento
+      // Aguarda processamento após confirmação
       await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => {});
       await new Promise((r) => setTimeout(r, 3000));
 
@@ -216,8 +225,10 @@ export async function executarSessao(
 
       if (paginaSucesso) {
         logger.info("execução finalizada com sucesso no portal (série)");
+      } else if (!confirmouMsg) {
+        throw new RoboError("EXECUCAO_FALHOU", "Confirmação não foi clicada e tela de sucesso não apareceu — execução NÃO gravada");
       } else {
-        logger.warn("tela de sucesso NÃO encontrada (série) — verificar se a execução foi gravada");
+        logger.warn("tela de sucesso NÃO encontrada (série) mas confirmação foi clicada — verificar manualmente");
       }
 
       // Capturar comprovante
