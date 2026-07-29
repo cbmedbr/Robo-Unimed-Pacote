@@ -696,7 +696,7 @@ async function preencherCBO(page: Page, config: Config): Promise<void> {
 
   await pageCBO.waitForLoadState("domcontentloaded").catch(() => {});
   await pageCBO.waitForLoadState("networkidle").catch(() => {});
-  await new Promise((r) => setTimeout(r, 1000));
+  await new Promise((r) => setTimeout(r, 3000));
 
   // Preenche código 2251 — busca input editável (não readonly)
   const inputCodCBO = pageCBO.locator('input[type="text"]:not([readonly])').first();
