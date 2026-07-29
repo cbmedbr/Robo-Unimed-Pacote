@@ -710,9 +710,9 @@ async function preencherCBO(page: Page, config: Config): Promise<void> {
     logger.info("código CBO 2251 preenchido (fallback primeiro input visível)");
   }
 
-  // Clica Consultar
+  // Clica Consultar/Localizar
   await pageCBO
-    .locator('button:has-text("Consultar"), input[value="Consultar"]')
+    .locator('button:has-text("Consultar"), input[value="Consultar"], button:has-text("Localizar"), input[value="Localizar"]')
     .first()
     .click({ timeout: config.clickTimeout });
 
