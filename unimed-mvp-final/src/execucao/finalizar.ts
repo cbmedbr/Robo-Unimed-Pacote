@@ -143,7 +143,19 @@ export async function finalizarParcial(
   if (paginaSucesso) {
     logger.info("execução finalizada com sucesso no portal");
   } else {
-    logger.warn("tela de sucesso NÃO encontrada — verificar se a execução foi gravada");
+    // Captura comprovante antes de lançar erro (para diagnóstico)
+    const nomeErro = `exec-falha-${sessaoId}-${Date.now()}.png`;
+    const caminhoErro = path.join(screenshotDir, nomeErro);
+    try {
+      await page.screenshot({ path: caminhoErro, fullPage: true });
+      logger.info({ path: caminhoErro }, "screenshot de falha capturado");
+    } catch {}
+
+    context.removeListener("page", onPage);
+    throw new RoboError(
+      "FINALIZACAO_EXECUCAO_FALHOU",
+      "Tela de sucesso NÃO encontrada após Finalizar Parcial — execução pode não ter sido gravada no portal"
+    );
   }
 
   // Remover listener
