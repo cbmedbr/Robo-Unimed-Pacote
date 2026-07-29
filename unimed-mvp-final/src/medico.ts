@@ -105,19 +105,28 @@ export async function preencherMedicoSolicitante(
   logger.info("CAMINHO B2: cadastrando novo prestador externo");
   await cadastrarPrestadorExterno(pageModal, input, config);
 
-  // Após cadastrar, o portal pode:
-  // (a) fechar o popup e preencher o campo na página principal automaticamente
-  // (b) manter o popup aberto com a lista atualizada
-  if (pageModal.isClosed()) {
-    logger.info("popup fechou após cadastro — campo deve estar preenchido na página principal");
-  } else {
-    // Tenta selecionar na lista se popup ainda aberta
-    try {
-      await selecionarMedicoNaLista(pageModal, input.medico_solicitante.nome, config);
-    } catch (err) {
-      logger.warn({ err: (err as Error).message }, "falha ao selecionar na lista após cadastro — popup pode ter fechado");
-    }
+  // Após cadastrar, o portal fecha o popup mas NÃO preenche o campo.
+  // Precisamos reabrir a busca e selecionar o médico recém-cadastrado.
+  await new Promise((r) => setTimeout(r, 2000));
+
+  // Fecha popup se ainda aberta
+  if (!pageModal.isClosed()) {
+    await pageModal.close().catch(() => {});
   }
+
+  // Reabre busca e seleciona o médico como Prestador Externo
+  logger.info("reabrindo busca para selecionar médico recém-cadastrado");
+  const pageModal2 = await clicarLupaMedicoSolicitante(page, config);
+  await preencherModalLocalizarPrestador(
+    pageModal2,
+    {
+      conselho: "CRM - Conselho Regional de Medicina",
+      numeroCRM: input.medico_solicitante.numero_crm,
+      cadastro: "Prestador Externo",
+    },
+    config
+  );
+  await selecionarMedicoNaLista(pageModal2, input.medico_solicitante.nome, config);
   await aguardarCampoMedicoPreenchido(page, config);
 }
 
