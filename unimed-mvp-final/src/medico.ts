@@ -698,16 +698,16 @@ async function preencherCBO(page: Page, config: Config): Promise<void> {
   await pageCBO.waitForLoadState("networkidle").catch(() => {});
   await new Promise((r) => setTimeout(r, 3000));
 
-  // Preenche código 2251 — busca input editável (não readonly)
-  const inputCodCBO = pageCBO.locator('input[type="text"]:not([readonly])').first();
-  const temInput = await inputCodCBO.isVisible({ timeout: 3000 }).catch(() => false);
+  // Preenche código 2251 — busca input editável (qualquer type)
+  const inputCodCBO = pageCBO.locator('input:not([readonly]):not([type="hidden"]):not([type="submit"])').first();
+  const temInput = await inputCodCBO.isVisible({ timeout: 5000 }).catch(() => false);
   if (temInput) {
     await inputCodCBO.fill("2251");
     logger.info("código CBO 2251 preenchido na popup");
   } else {
-    // Fallback: qualquer input de texto
-    await pageCBO.locator('input[type="text"]').first().fill("2251");
-    logger.info("código CBO 2251 preenchido (fallback primeiro input)");
+    // Fallback: qualquer input visível
+    await pageCBO.locator('input:visible').first().fill("2251");
+    logger.info("código CBO 2251 preenchido (fallback primeiro input visível)");
   }
 
   // Clica Consultar
