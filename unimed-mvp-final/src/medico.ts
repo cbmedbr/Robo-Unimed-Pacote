@@ -742,7 +742,7 @@ async function preencherCBO(page: Page, config: Config): Promise<void> {
 
   // Clica em "Médico clínico" (código 225125)
   await pageCBO
-    .locator('a:has-text("M\u00e9dico cl\u00ednico"), text=M\u00e9dico cl\u00ednico')
+    .locator('a:has-text("dico cl")')
     .first()
     .click({ timeout: config.clickTimeout });
 
