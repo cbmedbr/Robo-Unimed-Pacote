@@ -105,8 +105,19 @@ export async function preencherMedicoSolicitante(
   logger.info("CAMINHO B2: cadastrando novo prestador externo");
   await cadastrarPrestadorExterno(pageModal, input, config);
 
-  // Após cadastrar, lista atualiza, clica no nome
-  await selecionarMedicoNaLista(pageModal, input.medico_solicitante.nome, config);
+  // Após cadastrar, o portal pode:
+  // (a) fechar o popup e preencher o campo na página principal automaticamente
+  // (b) manter o popup aberto com a lista atualizada
+  if (pageModal.isClosed()) {
+    logger.info("popup fechou após cadastro — campo deve estar preenchido na página principal");
+  } else {
+    // Tenta selecionar na lista se popup ainda aberta
+    try {
+      await selecionarMedicoNaLista(pageModal, input.medico_solicitante.nome, config);
+    } catch (err) {
+      logger.warn({ err: (err as Error).message }, "falha ao selecionar na lista após cadastro — popup pode ter fechado");
+    }
+  }
   await aguardarCampoMedicoPreenchido(page, config);
 }
 
