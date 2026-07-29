@@ -653,92 +653,14 @@ async function aguardarCampoMedicoPreenchido(page: Page, config: Config): Promis
 }
 
 async function preencherCBO(page: Page, config: Config): Promise<void> {
-  logger.info("preenchendo CBO");
+  logger.info("preenchendo CBO — direto via JS (sem popup)");
 
-  // Registra páginas existentes ANTES de clicar na lupa
-  const paginasAntes = new Set(page.context().pages().filter(p => !p.isClosed()).map(p => p));
-
-  // Clica na lupa do CBO
-  const lupaCBO = page
-    .locator(':has-text("C\u00f3digo CBO")')
-    .locator('a, button, img[src*="search"], img[src*="lupa"]')
-    .first();
-
-  await lupaCBO.click({ timeout: config.clickTimeout });
-  await new Promise((r) => setTimeout(r, 2000));
-
-  // Espera uma NOVA popup abrir (que não existia antes)
-  let pageCBO: Page | null = null;
-  const inicio = Date.now();
-  while (Date.now() - inicio < config.navegacaoTimeout) {
-    for (const p of page.context().pages()) {
-      if (p.isClosed() || paginasAntes.has(p)) continue;
-      pageCBO = p;
-      logger.info({ url: p.url() }, "popup CBO detectada (nova janela)");
-      break;
-    }
-    if (pageCBO) break;
-    await new Promise((r) => setTimeout(r, 500));
-  }
-
-  if (!pageCBO) {
-    logger.warn("popup CBO não abriu, tentando preencher direto via JS");
-    // Fallback: seta o valor do CBO direto via JavaScript no form
-    await page.evaluate(() => {
-      const codInput = document.querySelector('input[name="CD_CBOS"], input[id="CD_CBOS"]') as HTMLInputElement;
-      const nomeInput = document.querySelector('input[name="NM_CBOS"], input[id="NM_CBOS"]') as HTMLInputElement;
-      if (codInput) { codInput.readOnly = false; codInput.value = '225125'; codInput.readOnly = true; }
-      if (nomeInput) { nomeInput.readOnly = false; nomeInput.value = 'Médico clínico'; nomeInput.readOnly = true; }
-    });
-    logger.info("CBO 225125 preenchido via JS (fallback)");
-    return;
-  }
-
-  try {
-    await pageCBO.waitForLoadState("domcontentloaded").catch(() => {});
-    await pageCBO.waitForLoadState("networkidle").catch(() => {});
-    await new Promise((r) => setTimeout(r, 3000));
-
-    // Preenche código 2251 — busca input editável (qualquer type)
-    const inputCodCBO = pageCBO.locator('input:not([readonly]):not([type="hidden"]):not([type="submit"])').first();
-    const temInput = await inputCodCBO.isVisible({ timeout: 5000 }).catch(() => false);
-    if (temInput) {
-      await inputCodCBO.fill("2251");
-      logger.info("código CBO 2251 preenchido na popup");
-    } else {
-      await pageCBO.locator('input:visible').first().fill("2251");
-      logger.info("código CBO 2251 preenchido (fallback primeiro input visível)");
-    }
-
-    // Clica Consultar/Localizar
-    await pageCBO
-      .locator('button:has-text("Consultar"), input[value="Consultar"], button:has-text("Localizar"), input[value="Localizar"]')
-      .first()
-      .click({ timeout: config.clickTimeout });
-
-    await pageCBO.waitForLoadState("networkidle").catch(() => {});
-    await new Promise((r) => setTimeout(r, 1500));
-
-    // Clica em "Médico clínico" (código 225125)
-    await pageCBO
-      .locator('a:has-text("dico cl")')
-      .first()
-      .click({ timeout: config.clickTimeout });
-
-    await pageCBO.waitForLoadState("networkidle").catch(() => {});
-    await new Promise((r) => setTimeout(r, 1000));
-    logger.info("CBO 225125 (Médico clínico) selecionado");
-  } catch (err) {
-    logger.warn({ err: (err as Error).message }, "popup CBO falhou, preenchendo direto via JS");
-    // Fecha popup se ainda aberta
-    if (!pageCBO.isClosed()) { await pageCBO.close().catch(() => {}); }
-    // Fallback: preenche direto no formulário principal
-    await page.evaluate(() => {
-      const codInput = document.querySelector('input[name="CD_CBOS"], input[id="CD_CBOS"]') as HTMLInputElement;
-      const nomeInput = document.querySelector('input[name="NM_CBOS"], input[id="NM_CBOS"]') as HTMLInputElement;
-      if (codInput) { codInput.readOnly = false; codInput.value = '225125'; codInput.readOnly = true; }
-      if (nomeInput) { nomeInput.readOnly = false; nomeInput.value = 'Médico clínico'; nomeInput.readOnly = true; }
-    });
-    logger.info("CBO 225125 preenchido via JS (fallback após falha do popup)");
-  }
+  // Preenche CBO direto via JavaScript — evita popup instável
+  await page.evaluate(() => {
+    const codInput = document.querySelector('input[name="CD_CBOS"], input[id="CD_CBOS"]') as HTMLInputElement;
+    const nomeInput = document.querySelector('input[name="NM_CBOS"], input[id="NM_CBOS"]') as HTMLInputElement;
+    if (codInput) { codInput.readOnly = false; codInput.value = '225125'; codInput.readOnly = true; }
+    if (nomeInput) { nomeInput.readOnly = false; nomeInput.value = 'Médico clínico'; nomeInput.readOnly = true; }
+  });
+  logger.info("CBO 225125 (Médico clínico) preenchido via JS");
 }
