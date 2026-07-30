@@ -86,19 +86,36 @@ export async function finalizarParcial(
     if (url.includes("finalizar_msg")) {
       logger.info({ url }, "página intermediária finalizar_msg detectada");
 
-      // Tenta clicar em qualquer botão de confirmação
+      // Diagnóstico: lista todos os botões visíveis na página intermediária
+      const botoesVisiveis = await p.evaluate(() => {
+        return Array.from(document.querySelectorAll('input[type="submit"], input[type="button"], button, a'))
+          .filter(el => {
+            const rect = (el as HTMLElement).getBoundingClientRect();
+            return rect.width > 0 && rect.height > 0;
+          })
+          .map(el => ({
+            tag: el.tagName,
+            type: el.getAttribute('type'),
+            value: (el as HTMLInputElement).value || el.textContent?.trim() || null,
+            name: el.getAttribute('name'),
+            id: el.getAttribute('id'),
+          }));
+      }).catch(() => []);
+      logger.info({ botoesVisiveis }, "DIAGNÓSTICO botões na página intermediária");
+
+      // Tenta clicar em botão de confirmação (específicos primeiro, genéricos por último)
       const botoesConfirmar = [
-        'input[type="submit"]',
-        'input[type="button"]',
+        'input[value="OK"]',
+        'input[value="Confirmar"]',
+        'input[value="Sim"]',
         'button:has-text("OK")',
         'button:has-text("Confirmar")',
         'button:has-text("Sim")',
         'a:has-text("OK")',
         'a:has-text("Confirmar")',
         'a:has-text("Sim")',
-        'input[value="OK"]',
-        'input[value="Confirmar"]',
-        'input[value="Sim"]',
+        'input[type="submit"]',
+        'input[type="button"]',
       ];
 
       for (const sel of botoesConfirmar) {
