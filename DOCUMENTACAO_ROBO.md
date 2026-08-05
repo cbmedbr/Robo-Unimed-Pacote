@@ -50,7 +50,7 @@ CRM (Vercel) → POST localhost:9876/executar ou /executar-sessao
 Antes de abrir o browser, valida:
 - `paciente.nome` ≥ 3 caracteres
 - `carteirinha_raw`: se começa com `0025` → tipo deve ser `LOCAL`; senão → `INTERCAMBIO`. Deve ter exatamente 17 dígitos
-- `medico_solicitante`: nome ≥ 3 chars, `uf_crm` = 2 letras maiúsculas, `numero_crm` = 4+ dígitos
+- `medico_solicitante`: nome ≥ 3 chars, `uf_crm` = 2 letras maiúsculas, `numero_crm` = apenas dígitos (sem mínimo)
 - `cid`: formato `/^[A-Z]\d{2}(\.\d{1,2})?$/`
 - `indicacao_clinica_formatada`: deve começar com `"CID "`
 - `procedimento.codigo`: um de `50000470`, `2250005103`, `2250005278`, `2250005367`
@@ -395,6 +395,12 @@ O formulário de série tem 10 campos `dt_serie_1` a `dt_serie_10` na seção "D
 1. CRM chama `POST localhost:9876/executar-sessao` com dados completos
 2. Servidor cria linha em `unimed_execucao_jobs`, responde 202
 3. Executa em background (1 por vez — operador precisa estar presente)
+4. **Pós-sucesso (executor-sessao.ts):**
+   - Atualiza `agendamentos.status_execucao → 'executado'` com retry (2 tentativas)
+   - Usa `dados.data_execucao` (data do agendamento original, não a data atual)
+   - Só marca o job como `sucesso` se o agendamento foi atualizado; caso contrário marca `sucesso_parcial`
+   - Incrementa `guias.sessoes_executadas`
+5. **Data no portal Unimed:** no fluxo série, o robô preenche `dt_serie_N` com a data do agendamento. No fluxo normal (QR code), a Unimed registra a data da leitura do QR (comportamento do portal, não controlável)
 
 ### Health check
 - CRM faz polling em `GET localhost:9876/health`

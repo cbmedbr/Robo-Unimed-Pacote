@@ -179,31 +179,43 @@ export async function executarSessaoJob(
 
     // Atualizar job com resultado
     if (resultado.sucesso) {
-      await atualizarStatus(jobId, "sucesso", {
-        comprovante_url: resultado.comprovante_path || null,
-        duracao_ms: resultado.duracao_ms || (Date.now() - inicioMs),
-      });
-
-      // Marcar agendamento como executado no CRM
-      // Enum status_execucao: aguardando_execucao → executado
+      // PRIMEIRO: marcar agendamento como executado no CRM
+      // Usa data_execucao do agendamento (não a data atual) para respeitar execuções retroativas
       const agUpdate: Record<string, unknown> = {
         status_execucao: "executado",
-        data_execucao: new Date().toISOString(),
+        data_execucao: dados.data_execucao || new Date().toISOString(),
         executado_por: "Robô Unimed",
       };
       if (dados.qrcode_valor) {
         agUpdate.token_execucao = dados.qrcode_valor;
       }
-      const { error: agErr } = await supabase
-        .from("agendamentos")
-        .update(agUpdate)
-        .eq("id", dados.sessao_id);
 
-      if (agErr) {
-        console.error(`[exec-${jobId}] Erro ao marcar agendamento como executado:`, agErr.message);
-      } else {
-        console.log(`[exec-${jobId}] Agendamento ${dados.sessao_id} status_execucao → executado`);
+      let agOk = false;
+      for (let tentativa = 0; tentativa < 2; tentativa++) {
+        const { error: agErr } = await supabase
+          .from("agendamentos")
+          .update(agUpdate)
+          .eq("id", dados.sessao_id);
+
+        if (!agErr) {
+          agOk = true;
+          console.log(`[exec-${jobId}] Agendamento ${dados.sessao_id} status_execucao → executado`);
+          break;
+        }
+        console.error(`[exec-${jobId}] Erro ao marcar agendamento (tentativa ${tentativa + 1}/2):`, agErr.message);
+        if (tentativa === 0) await new Promise(r => setTimeout(r, 1000));
       }
+
+      if (!agOk) {
+        console.error(`[exec-${jobId}] ⚠️ Agendamento NÃO atualizado após 2 tentativas — job marcado como sucesso_parcial`);
+      }
+
+      // DEPOIS: marcar job como sucesso (ou sucesso_parcial se agendamento não atualizou)
+      await atualizarStatus(jobId, agOk ? "sucesso" : "sucesso_parcial", {
+        comprovante_url: resultado.comprovante_path || null,
+        duracao_ms: resultado.duracao_ms || (Date.now() - inicioMs),
+        ...(agOk ? {} : { erro_mensagem: "Executado na Unimed mas falhou ao atualizar agendamento no CRM" }),
+      });
 
       // Incrementar sessoes_executadas na guia
       const { data: agData } = await supabase
@@ -213,7 +225,6 @@ export async function executarSessaoJob(
         .maybeSingle();
 
       if (agData?.guia_id) {
-        // Lê valor atual e incrementa
         const { data: guiaData } = await supabase
           .from("guias")
           .select("sessoes_executadas")
@@ -233,7 +244,7 @@ export async function executarSessaoJob(
         }
       }
 
-      console.log(`[exec-${jobId}] ✅ Sessão executada com sucesso`);
+      console.log(`[exec-${jobId}] ✅ Sessão executada com sucesso${agOk ? "" : " (parcial — agendamento não atualizado)"}`);
     } else {
       await atualizarStatus(jobId, "falhou", {
         erro_codigo: resultado.erro_codigo,

@@ -4,6 +4,22 @@
 
 ---
 
+## 04/08/2026
+
+### Fix: CRM não marcava agendamento como executado após sucesso no portal
+**Arquivos:** `servidor-local/src/executor-sessao.ts`
+- Job era marcado como `sucesso` ANTES de atualizar o agendamento — se o update falhasse, agendamento ficava preso em `aguardando_execucao`
+- Invertida a ordem: agora atualiza agendamento primeiro, com retry (2 tentativas)
+- Se falhar após 2 tentativas, job vai como `sucesso_parcial` com mensagem de erro
+- `data_execucao` agora usa `dados.data_execucao` (data do agendamento) em vez de `new Date()` (data atual)
+
+### Fix: validação de CRM aceitava apenas 4+ dígitos
+**Arquivos:** `unimed-mvp-final/src/validacao.ts`
+- Regex `/^\d{4,}$/` rejeitava CRMs válidos com menos de 4 dígitos (ex: "942")
+- Alterado para `/^\d+$/` — aceita qualquer quantidade de dígitos
+
+---
+
 ## 20/07/2026
 
 ### Fix: fluxo série no robô de execução
