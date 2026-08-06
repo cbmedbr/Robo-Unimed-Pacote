@@ -139,22 +139,28 @@ export async function finalizarParcial(
     }
   }
 
-  // Aguardar mais um pouco e verificar se chegou na tela de sucesso
-  await new Promise((r) => setTimeout(r, 2000));
-
-  // Verificar tela de sucesso em qualquer página
+  // Aguardar portal processar e verificar tela de sucesso (com retry)
   let paginaSucesso: Page | null = null;
-  for (const p of context.pages()) {
-    if (p.isClosed()) continue;
-    const url = p.url();
-    const temSucesso = url.includes("sucesso") ||
-      await p.locator('text=/Operação realizada com sucesso/i').first().isVisible({ timeout: 2000 }).catch(() => false);
+  for (let tentativa = 0; tentativa < 3; tentativa++) {
+    await new Promise((r) => setTimeout(r, 5000));
 
-    if (temSucesso) {
-      paginaSucesso = p;
-      logger.info({ url }, "tela de sucesso encontrada!");
-      break;
+    // Também aguarda a página principal recarregar
+    await page.waitForLoadState("networkidle", { timeout: 10000 }).catch(() => {});
+
+    for (const p of context.pages()) {
+      if (p.isClosed()) continue;
+      const url = p.url();
+      const temSucesso = url.includes("sucesso") ||
+        await p.locator('text=/Operação realizada com sucesso/i').first().isVisible({ timeout: 5000 }).catch(() => false);
+
+      if (temSucesso) {
+        paginaSucesso = p;
+        logger.info({ url, tentativa }, "tela de sucesso encontrada!");
+        break;
+      }
     }
+    if (paginaSucesso) break;
+    logger.info({ tentativa }, "tela de sucesso não encontrada, tentando novamente...");
   }
 
   if (paginaSucesso) {
