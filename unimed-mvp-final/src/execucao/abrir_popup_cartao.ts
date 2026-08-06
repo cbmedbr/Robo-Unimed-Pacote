@@ -100,8 +100,8 @@ export async function abrirPopupCartao(
     });
 
     if (isSerie) {
-      // Guia em série: o botão "Gravar e Finalizar" já está na página
-      const temBotaoGravar = await page.locator('#Button_Submit').isVisible({ timeout: 2000 }).catch(() => false);
+      // Guia em série: "Finalizar Parcial" já está na página (sem popup)
+      const temBotaoGravar = await page.locator('input#Button_Parcial').isVisible({ timeout: 2000 }).catch(() => false);
       if (temBotaoGravar) {
         logger.info("guia em série detectada — formulário de execução já está na página (sem popup)");
         return { page, serie: true };

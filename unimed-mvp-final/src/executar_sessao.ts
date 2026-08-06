@@ -91,9 +91,9 @@ export async function executarSessao(
 
     if (resultado.serie) {
       // === FLUXO SÉRIE: formulário já está na página, sem popup de cartão ===
-      // Precisa preencher dt_serie_N com a data/hora antes de gravar.
-      // "Gravar e Finalizar" faz tudo — não precisa de "Finalizar Parcial" depois.
-      logger.info("=== FLUXO SÉRIE: preenchendo data da série e gravando ===");
+      // Precisa preencher dt_serie_N com a data/hora e depois "Finalizar Parcial".
+      // NUNCA usar "Gravar e Finalizar" (#Button_Submit) — consome TODAS as sessões de uma vez.
+      logger.info("=== FLUXO SÉRIE: preenchendo data da série e finalizando parcial ===");
 
       // Encontrar o próximo campo dt_serie vazio (1 a 10)
       const proximoCampo = await page.evaluate(() => {
@@ -155,9 +155,9 @@ export async function executarSessao(
         registrarDialogHandler(p);
       });
 
-      // Clica "Gravar e Finalizar"
-      await page.locator('#Button_Submit').click({ timeout: 10000 });
-      logger.info("clicou 'Gravar e Finalizar'");
+      // Clica "Finalizar Parcial" (NUNCA "Gravar e Finalizar" que consome todas as sessões)
+      await page.locator('input#Button_Parcial').click({ timeout: 10000 });
+      logger.info("clicou 'Finalizar Parcial' (série)");
 
       // Polling: aguarda finalizar_msg.do aparecer em qualquer página (até 15s)
       let paginaMsg: import("playwright").Page | null = null;
