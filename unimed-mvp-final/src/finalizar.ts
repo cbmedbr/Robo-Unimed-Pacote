@@ -51,10 +51,10 @@ export async function finalizarGuia(
   // Mensagens típicas: faixa vermelha no topo do form com texto de erro.
   const conteudoInicial = await page.content();
   const padroesErro: { regex: RegExp; nome: string }[] = [
-    { regex: /N[\u00e3a]o \u00e9 permitido/i, nome: "não é permitido" },
-    { regex: /valor do campo .* (?:\u00e9 inv|invalid|obrigat)/i, nome: "campo inválido/obrigatório" },
+    { regex: /N[ãa]o é permitido/i, nome: "não é permitido" },
+    { regex: /valor do campo .* (?:é inv|invalid|obrigat)/i, nome: "campo inválido/obrigatório" },
     { regex: /preench(?:a|er) (?:o|os) campo/i, nome: "preencher campo" },
-    { regex: /campo.*obrigat\u00f3rio/i, nome: "campo obrigatório" },
+    { regex: /campo.*obrigatório/i, nome: "campo obrigatório" },
     { regex: /Existem erros/i, nome: "existem erros" },
   ];
 
@@ -100,7 +100,7 @@ export async function finalizarGuia(
     await page.waitForFunction(
       () => {
         const texto = document.body.innerText || "";
-        return /Opera[\u00e7c][\u00e3a]o realizada com sucesso/i.test(texto);
+        return /Opera[çc][ãa]o realizada com sucesso/i.test(texto);
       },
       { timeout: 5000 }
     );
@@ -222,7 +222,7 @@ export async function finalizarGuia(
   if (!numeroGuia) {
     try {
       const conteudo = await page.content();
-      const match = conteudo.match(/N[\u00ba\u00b0o]\s*Guia[:\s]*(\d{8,})/i);
+      const match = conteudo.match(/N[º°o]\s*Guia[:\s]*(\d{8,})/i);
       if (match) {
         numeroGuia = match[1];
         logger.info({ numeroGuia, fonte: "regex texto" }, "número da guia capturado");
@@ -238,14 +238,14 @@ export async function finalizarGuia(
       await page.waitForFunction(
         () => {
           const texto = document.body.innerText;
-          const match = texto.match(/N[\u00ba\u00b0o]\s*Guia[:\s]*(\d{8,})|guia.*(\d{8,})/i);
+          const match = texto.match(/N[º°o]\s*Guia[:\s]*(\d{8,})|guia.*(\d{8,})/i);
           return match !== null;
         },
         { timeout: 10000 }
       );
 
       const conteudo = await page.content();
-      const match = conteudo.match(/N[\u00ba\u00b0o]\s*Guia[:\s]*(\d{8,})|guia.*?(\d{8,})/i);
+      const match = conteudo.match(/N[º°o]\s*Guia[:\s]*(\d{8,})|guia.*?(\d{8,})/i);
       numeroGuia = match?.[1] || match?.[2] || null;
       if (numeroGuia) {
         logger.info({ numeroGuia, fonte: "waitForFunction" }, "número da guia capturado");
@@ -257,7 +257,7 @@ export async function finalizarGuia(
 
   // Verifica se houve algum indicador de erro de validação
   const temErroValidacao = await page
-    .locator('text=/Existem erros|campo.*obrigat|valor.*inv\u00e1lido|n\u00e3o foi poss\u00edvel/i')
+    .locator('text=/Existem erros|campo.*obrigat|valor.*inválido|não foi possível/i')
     .first()
     .isVisible({ timeout: 1000 })
     .catch(() => false);
@@ -337,37 +337,70 @@ async function garantirProfissionalExecutante(page: Page, config: Config, input:
   const nomeBusca = input.psicologo_executante_nome;
   logger.info({ nomeBusca }, "garantindo profissional executante");
 
-  // Acha dinamicamente o select que tem opção com o nome do psicólogo
   // Normaliza acentos (CRM pode ter "Débora", SGU tem "DEBORA")
-  // Normaliza fora do evaluate e passa os termos já prontos
-  const stripAccents = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  const stripAccents = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
   const termosNormalizados = stripAccents(nomeBusca).split(/\s+/);
 
-  // Passa como string para evitar que tsx injete __name dentro do browser
+  // Busca por PALAVRAS COMPLETAS (não substring) com prioridade para match exato.
+  // score 3 = match exato (mesma qtde de palavras), score 2 = poucas extras, score 1 = contém todas.
+  // "ANA SILVA" NÃO casa com "MARIANA SILVA" porque "ANA" !== "MARIANA" (word boundary).
   const resultado = await page.evaluate(`
     (function(termos) {
       var strip = function(s) { return s.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase(); };
       var selects = document.querySelectorAll('select');
+      var melhorMatch = null;
+      var melhorScore = 0;
       for (var i = 0; i < selects.length; i++) {
         var sel = selects[i];
+        if (sel.options.length < 2) continue;
         for (var j = 0; j < sel.options.length; j++) {
           var o = sel.options[j];
+          if (!o.value || o.value === '' || o.value === '0') continue;
           var textoNorm = strip(o.text);
-          var ok = true;
+          var palavrasOpcao = textoNorm.split(/\\s+/).filter(function(w) { return w.length > 0; });
+          var todosTermosCasam = true;
           for (var k = 0; k < termos.length; k++) {
-            if (textoNorm.indexOf(termos[k]) === -1) { ok = false; break; }
+            var termoCasou = false;
+            for (var m = 0; m < palavrasOpcao.length; m++) {
+              if (palavrasOpcao[m] === termos[k]) { termoCasou = true; break; }
+            }
+            if (!termoCasou) { todosTermosCasam = false; break; }
           }
-          if (ok) {
-            return { name: sel.getAttribute('name'), id: sel.getAttribute('id'), value: o.value, text: o.text };
+          if (!todosTermosCasam) continue;
+          var score = 1;
+          if (palavrasOpcao.length === termos.length) score = 3;
+          else if (palavrasOpcao.length <= termos.length + 2) score = 2;
+          if (score > melhorScore) {
+            melhorScore = score;
+            melhorMatch = { name: sel.getAttribute('name'), id: sel.getAttribute('id'), value: o.value, text: o.text, score: score };
           }
+          if (score === 3) return melhorMatch;
         }
       }
-      return null;
+      return melhorMatch;
     })(${JSON.stringify(termosNormalizados)})
   `);
 
   if (!resultado) {
-    // CRÍTICO: não pode continuar com executante errado (SGU default = primeiro da lista)
+    // Loga todas as opções disponíveis para diagnóstico
+    const opcoes = await page.evaluate(`
+      (function() {
+        var selects = document.querySelectorAll('select');
+        var todas = [];
+        for (var i = 0; i < selects.length; i++) {
+          var sel = selects[i];
+          if (sel.options.length < 2) continue;
+          for (var j = 0; j < sel.options.length; j++) {
+            var o = sel.options[j];
+            if (!o.value || o.value === '' || o.value === '0') continue;
+            todas.push({ select: sel.getAttribute('name') || sel.getAttribute('id'), text: o.text, value: o.value });
+          }
+        }
+        return todas;
+      })()
+    `);
+    logger.error({ nomeBusca, termos: termosNormalizados, opcoesDisponiveis: opcoes }, "profissional NÃO encontrado — opções disponíveis logadas");
+
     throw new Error(
       `FINALIZACAO_FALHOU: profissional executante "${nomeBusca}" não encontrado no select do SGU. ` +
       `Verifique se o psicólogo está cadastrado como profissional na Unimed.`
@@ -379,7 +412,7 @@ async function garantirProfissionalExecutante(page: Page, config: Config, input:
     ? `#${resultado.id}`
     : `select[name="${resultado.name}"]`;
   await page.locator(seletor).selectOption({ value: resultado.value });
-  logger.info({ seletor, value: resultado.value, text: resultado.text }, "profissional executante selecionado");
+  logger.info({ seletor, value: resultado.value, text: resultado.text, score: resultado.score }, "profissional executante selecionado");
 
   // Aguarda Botao_Finalizar aparecer (fica oculto até escolher executante)
   await page.waitForFunction(
