@@ -83,62 +83,64 @@ export async function executarSessao(
       registrarDialogHandler(novaPagina);
     });
 
-    // 6. Preencher data da sessão no próximo campo série vazio (SEMPRE, antes de tudo)
-    logger.info("=== ETAPA 6: PREENCHER DATA DA SESSÃO ===");
+    // Função auxiliar: preenche a data no próximo campo dt_serie_N vazio
+    async function preencherDataSerie() {
+      const proximoCampo = await page.evaluate(() => {
+        for (let i = 1; i <= 10; i++) {
+          const el = document.getElementById(`dt_serie_${i}`) as HTMLInputElement | null;
+          if (!el) continue;
+          if (!el.value || el.value.trim() === '') return i;
+        }
+        return null;
+      });
 
-    const proximoCampo = await page.evaluate(() => {
-      for (let i = 1; i <= 10; i++) {
-        const el = document.getElementById(`dt_serie_${i}`) as HTMLInputElement | null;
-        if (!el) continue;
-        if (!el.value || el.value.trim() === '') return i;
+      if (proximoCampo === null) {
+        throw new RoboError(
+          "SESSOES_ESGOTADAS",
+          "Todos os 10 campos de data da série já estão preenchidos. Não há espaço para nova execução."
+        );
       }
-      return null;
-    });
 
-    if (proximoCampo === null) {
-      throw new RoboError(
-        "SESSOES_ESGOTADAS",
-        "Todos os 10 campos de data da série já estão preenchidos. Não há espaço para nova execução."
-      );
+      const dataExec = new Date(dados.data_execucao.includes("T") ? dados.data_execucao : dados.data_execucao + "T12:00:00");
+      const dd = String(dataExec.getDate()).padStart(2, "0");
+      const mm = String(dataExec.getMonth() + 1).padStart(2, "0");
+      const yyyy = dataExec.getFullYear();
+      const hh = String(dataExec.getHours()).padStart(2, "0");
+      const min = String(dataExec.getMinutes()).padStart(2, "0");
+      const dataHoraSerie = `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+
+      const campoId = `dt_serie_${proximoCampo}`;
+      logger.info({ campoId, dataHoraSerie }, "preenchendo campo da série");
+
+      await page.evaluate((id) => {
+        const el = document.getElementById(id) as HTMLInputElement | null;
+        if (el) {
+          el.disabled = false;
+          el.style.display = '';
+          const img = el.nextElementSibling;
+          if (img && img.tagName === 'IMG') (img as HTMLElement).style.display = '';
+        }
+      }, campoId);
+
+      await page.locator(`#${campoId}`).fill(dataHoraSerie);
+      await page.locator(`#${campoId}`).press("Tab");
+      await page.locator(`#${campoId}`).dispatchEvent("change");
+      await new Promise((r) => setTimeout(r, 1000));
+
+      logger.info({ campoId, valor: dataHoraSerie }, "data da série preenchida");
     }
 
-    const dataExec = new Date(dados.data_execucao.includes("T") ? dados.data_execucao : dados.data_execucao + "T12:00:00");
-    const dd = String(dataExec.getDate()).padStart(2, "0");
-    const mm = String(dataExec.getMonth() + 1).padStart(2, "0");
-    const yyyy = dataExec.getFullYear();
-    const hh = String(dataExec.getHours()).padStart(2, "0");
-    const min = String(dataExec.getMinutes()).padStart(2, "0");
-    const dataHoraSerie = `${dd}/${mm}/${yyyy} ${hh}:${min}`;
-
-    const campoId = `dt_serie_${proximoCampo}`;
-    logger.info({ campoId, dataHoraSerie }, "preenchendo campo da série");
-
-    await page.evaluate((id) => {
-      const el = document.getElementById(id) as HTMLInputElement | null;
-      if (el) {
-        el.disabled = false;
-        el.style.display = '';
-        const img = el.nextElementSibling;
-        if (img && img.tagName === 'IMG') (img as HTMLElement).style.display = '';
-      }
-    }, campoId);
-
-    await page.locator(`#${campoId}`).fill(dataHoraSerie);
-    await page.locator(`#${campoId}`).press("Tab");
-    await page.locator(`#${campoId}`).dispatchEvent("change");
-    await new Promise((r) => setTimeout(r, 1000));
-
-    logger.info({ campoId, valor: dataHoraSerie }, "data da série preenchida");
-
-    // 7. Abrir popup do cartão (ou detectar guia em série sem popup)
-    logger.info("=== ETAPA 7: ABRIR POPUP CARTÃO ===");
+    // 6. Abrir popup do cartão (ou detectar guia em série)
+    logger.info("=== ETAPA 6: ABRIR POPUP CARTÃO ===");
     const resultado = await abrirPopupCartao(page, context, 20_000);
 
     let comprovantePath: string | null = null;
 
     if (resultado.serie) {
-      // === FLUXO SÉRIE SEM POPUP: data já preenchida, só Finalizar Parcial ===
-      logger.info("=== FLUXO SÉRIE: finalizando parcial (data já preenchida) ===");
+      // === FLUXO SÉRIE SEM POPUP: preencher data → Finalizar Parcial ===
+      // Campos dt_serie_N já estão visíveis, não precisa de token antes
+      logger.info("=== FLUXO SÉRIE: preenchendo data e finalizando parcial ===");
+      await preencherDataSerie();
 
       registrarDialogHandler(page);
 
@@ -230,7 +232,7 @@ export async function executarSessao(
         logger.warn({ err: (err as Error).message }, "falha ao capturar comprovante (série)");
       }
     } else {
-      // === FLUXO NORMAL: data já preenchida → popup + QR Code → Finalizar Parcial ===
+      // === FLUXO NORMAL: popup + QR Code (token) → preencher data → Finalizar Parcial ===
       const popup = resultado.page;
 
       registrarDialogHandler(popup);
@@ -267,7 +269,11 @@ export async function executarSessao(
       await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => {});
       await new Promise((r) => setTimeout(r, 2000));
 
-      // 10. Finalizar Parcial + comprovante (data já foi preenchida na etapa 6)
+      // 9. Preencher data (calendário só aparece DEPOIS do token/QR Code)
+      logger.info("=== ETAPA 9: PREENCHER DATA DA SESSÃO (pós-token) ===");
+      await preencherDataSerie();
+
+      // 10. Finalizar Parcial + comprovante
       logger.info("=== ETAPA 10: FINALIZAR PARCIAL ===");
       comprovantePath = await finalizarParcial(
         page,
