@@ -83,79 +83,70 @@ export async function executarSessao(
       registrarDialogHandler(novaPagina);
     });
 
-    // 6. Abrir popup do cartão (ou detectar guia em série)
-    logger.info("=== ETAPA 6: ABRIR POPUP CARTÃO ===");
+    // 6. Preencher data da sessão no próximo campo série vazio (SEMPRE, antes de tudo)
+    logger.info("=== ETAPA 6: PREENCHER DATA DA SESSÃO ===");
+
+    const proximoCampo = await page.evaluate(() => {
+      for (let i = 1; i <= 10; i++) {
+        const el = document.getElementById(`dt_serie_${i}`) as HTMLInputElement | null;
+        if (!el) continue;
+        if (!el.value || el.value.trim() === '') return i;
+      }
+      return null;
+    });
+
+    if (proximoCampo === null) {
+      throw new RoboError(
+        "SESSOES_ESGOTADAS",
+        "Todos os 10 campos de data da série já estão preenchidos. Não há espaço para nova execução."
+      );
+    }
+
+    const dataExec = new Date(dados.data_execucao.includes("T") ? dados.data_execucao : dados.data_execucao + "T12:00:00");
+    const dd = String(dataExec.getDate()).padStart(2, "0");
+    const mm = String(dataExec.getMonth() + 1).padStart(2, "0");
+    const yyyy = dataExec.getFullYear();
+    const hh = String(dataExec.getHours()).padStart(2, "0");
+    const min = String(dataExec.getMinutes()).padStart(2, "0");
+    const dataHoraSerie = `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+
+    const campoId = `dt_serie_${proximoCampo}`;
+    logger.info({ campoId, dataHoraSerie }, "preenchendo campo da série");
+
+    await page.evaluate((id) => {
+      const el = document.getElementById(id) as HTMLInputElement | null;
+      if (el) {
+        el.disabled = false;
+        el.style.display = '';
+        const img = el.nextElementSibling;
+        if (img && img.tagName === 'IMG') (img as HTMLElement).style.display = '';
+      }
+    }, campoId);
+
+    await page.locator(`#${campoId}`).fill(dataHoraSerie);
+    await page.locator(`#${campoId}`).press("Tab");
+    await page.locator(`#${campoId}`).dispatchEvent("change");
+    await new Promise((r) => setTimeout(r, 1000));
+
+    logger.info({ campoId, valor: dataHoraSerie }, "data da série preenchida");
+
+    // 7. Abrir popup do cartão (ou detectar guia em série sem popup)
+    logger.info("=== ETAPA 7: ABRIR POPUP CARTÃO ===");
     const resultado = await abrirPopupCartao(page, context, 20_000);
 
     let comprovantePath: string | null = null;
 
     if (resultado.serie) {
-      // === FLUXO SÉRIE: formulário já está na página, sem popup de cartão ===
-      // Precisa preencher dt_serie_N com a data/hora e depois "Finalizar Parcial".
-      // NUNCA usar "Gravar e Finalizar" (#Button_Submit) — consome TODAS as sessões de uma vez.
-      logger.info("=== FLUXO SÉRIE: preenchendo data da série e finalizando parcial ===");
-
-      // Encontrar o próximo campo dt_serie vazio (1 a 10)
-      const proximoCampo = await page.evaluate(() => {
-        for (let i = 1; i <= 10; i++) {
-          const el = document.getElementById(`dt_serie_${i}`) as HTMLInputElement | null;
-          if (!el) continue;
-          if (!el.value || el.value.trim() === '') return i;
-        }
-        return null;
-      });
-
-      if (proximoCampo === null) {
-        throw new RoboError(
-          "SESSOES_ESGOTADAS",
-          "Todos os 10 campos de data da série já estão preenchidos. Não há espaço para nova execução."
-        );
-      }
-
-      // Formatar data/hora da sessão: dd/MM/yyyy HH:mm
-      // data_execucao pode vir como "2026-07-17" ou "2026-07-17T14:00:00.000Z"
-      const dataExec = new Date(dados.data_execucao.includes("T") ? dados.data_execucao : dados.data_execucao + "T12:00:00");
-      const dd = String(dataExec.getDate()).padStart(2, "0");
-      const mm = String(dataExec.getMonth() + 1).padStart(2, "0");
-      const yyyy = dataExec.getFullYear();
-      const hh = String(dataExec.getHours()).padStart(2, "0");
-      const min = String(dataExec.getMinutes()).padStart(2, "0");
-      const dataHoraSerie = `${dd}/${mm}/${yyyy} ${hh}:${min}`;
-
-      const campoId = `dt_serie_${proximoCampo}`;
-      logger.info({ campoId, dataHoraSerie }, "preenchendo campo da série");
-
-      // Habilitar o campo se estiver disabled (campos 2-10 começam disabled)
-      await page.evaluate((id) => {
-        const el = document.getElementById(id) as HTMLInputElement | null;
-        if (el) {
-          el.disabled = false;
-          el.style.display = '';
-          // Mostra o datepicker trigger também
-          const img = el.nextElementSibling;
-          if (img && img.tagName === 'IMG') (img as HTMLElement).style.display = '';
-        }
-      }, campoId);
-
-      await page.locator(`#${campoId}`).fill(dataHoraSerie);
-      await page.locator(`#${campoId}`).press("Tab");
-      // Dispara o change event que o portal espera
-      await page.locator(`#${campoId}`).dispatchEvent("change");
-      await new Promise((r) => setTimeout(r, 1000));
-
-      logger.info({ campoId, valor: dataHoraSerie }, "data da série preenchida");
+      // === FLUXO SÉRIE SEM POPUP: data já preenchida, só Finalizar Parcial ===
+      logger.info("=== FLUXO SÉRIE: finalizando parcial (data já preenchida) ===");
 
       registrarDialogHandler(page);
 
-      // Captura novas páginas (finalizar_msg.do abre como nova janela)
-      const novasPaginasSerie: import("playwright").Page[] = [];
       context.on("page", (p) => {
         logger.info({ url: p.url() }, "nova página detectada (série)");
-        novasPaginasSerie.push(p);
         registrarDialogHandler(p);
       });
 
-      // Clica "Finalizar Parcial" (NUNCA "Gravar e Finalizar" que consome todas as sessões)
       await page.locator('input#Button_Parcial').click({ timeout: 10000 });
       logger.info("clicou 'Finalizar Parcial' (série)");
 
@@ -178,7 +169,6 @@ export async function executarSessao(
       if (paginaMsg) {
         logger.info({ url: paginaMsg.url() }, "página finalizar_msg detectada");
         await paginaMsg.waitForLoadState("domcontentloaded", { timeout: 10000 }).catch(() => {});
-        // Registra handler de dialog na página intermediária
         registrarDialogHandler(paginaMsg);
 
         const botoesConfirmar = [
@@ -205,11 +195,9 @@ export async function executarSessao(
         logger.error("página finalizar_msg não encontrada ou sem botão Confirmar");
       }
 
-      // Aguarda processamento após confirmação
       await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => {});
       await new Promise((r) => setTimeout(r, 3000));
 
-      // Verifica tela de sucesso em qualquer página
       let paginaSucesso: import("playwright").Page | null = null;
       for (const p of context.pages()) {
         if (p.isClosed()) continue;
@@ -231,7 +219,6 @@ export async function executarSessao(
         logger.warn("tela de sucesso NÃO encontrada (série) mas confirmação foi clicada — verificar manualmente");
       }
 
-      // Capturar comprovante
       const paginaComprovante = paginaSucesso || page;
       const nomeArquivo = `exec-${dados.sessao_id}-${Date.now()}.png`;
       const caminhoCompleto = path.join(comprovantesDir, nomeArquivo);
@@ -243,13 +230,11 @@ export async function executarSessao(
         logger.warn({ err: (err as Error).message }, "falha ao capturar comprovante (série)");
       }
     } else {
-      // === FLUXO NORMAL: popup de cartão + QR Code ===
+      // === FLUXO NORMAL: data já preenchida → popup + QR Code → Finalizar Parcial ===
       const popup = resultado.page;
 
-      // Registra handler no popup também
       registrarDialogHandler(popup);
 
-      // Injeta script no popup pra auto-aceitar confirm() do portal.
       await popup.addInitScript(() => {
         window.confirm = () => {
           console.log("[robo] confirm() interceptado — retornando true");
@@ -258,11 +243,10 @@ export async function executarSessao(
       });
       logger.info("script de auto-accept confirm() injetado no popup");
 
-      // 7-8. QR Code (operador apresenta)
-      logger.info("=== ETAPAS 7-8: AGUARDAR QR CODE ===");
+      // 8-9. QR Code (operador apresenta)
+      logger.info("=== ETAPAS 8-9: AGUARDAR QR CODE ===");
       await aguardarQrCode(popup, onStatusUpdate);
 
-      // Aguardar o dialog de confirmação ser processado
       logger.info("aguardando dialog de confirmação do portal...");
       const inicioDialog = Date.now();
       while (!dialogRecebido && Date.now() - inicioDialog < 15000) {
@@ -279,55 +263,12 @@ export async function executarSessao(
         }
       }
 
-      // Aguardar página atualizar após aceitar dialog
       await page.bringToFront();
       await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => {});
       await new Promise((r) => setTimeout(r, 2000));
 
-      // Preencher data no próximo campo série vazio (dt_serie_N)
-      // O portal exige a data preenchida antes de "Finalizar Parcial"
-      const proximoCampoNormal = await page.evaluate(() => {
-        for (let i = 1; i <= 10; i++) {
-          const el = document.getElementById(`dt_serie_${i}`) as HTMLInputElement | null;
-          if (!el) continue;
-          if (!el.value || el.value.trim() === '') return i;
-        }
-        return null;
-      });
-
-      if (proximoCampoNormal !== null) {
-        const dataExec = new Date(dados.data_execucao.includes("T") ? dados.data_execucao : dados.data_execucao + "T12:00:00");
-        const dd = String(dataExec.getDate()).padStart(2, "0");
-        const mm = String(dataExec.getMonth() + 1).padStart(2, "0");
-        const yyyy = dataExec.getFullYear();
-        const hh = String(dataExec.getHours()).padStart(2, "0");
-        const min = String(dataExec.getMinutes()).padStart(2, "0");
-        const dataHoraNormal = `${dd}/${mm}/${yyyy} ${hh}:${min}`;
-        const campoIdNormal = `dt_serie_${proximoCampoNormal}`;
-
-        // Habilitar campo se disabled (campos 2-10 começam disabled)
-        await page.evaluate((id) => {
-          const el = document.getElementById(id) as HTMLInputElement | null;
-          if (el) {
-            el.disabled = false;
-            el.style.display = '';
-            const img = el.nextElementSibling;
-            if (img && img.tagName === 'IMG') (img as HTMLElement).style.display = '';
-          }
-        }, campoIdNormal);
-
-        await page.locator(`#${campoIdNormal}`).fill(dataHoraNormal);
-        await page.locator(`#${campoIdNormal}`).press("Tab");
-        await page.locator(`#${campoIdNormal}`).dispatchEvent("change");
-        await new Promise((r) => setTimeout(r, 1000));
-
-        logger.info({ campoId: campoIdNormal, valor: dataHoraNormal }, "data da série preenchida (fluxo normal)");
-      } else {
-        logger.warn("todos os 10 campos de série já preenchidos — prosseguindo sem preencher data");
-      }
-
-      // 9-10. Finalizar Parcial + comprovante
-      logger.info("=== ETAPAS 9-10: FINALIZAR PARCIAL ===");
+      // 10. Finalizar Parcial + comprovante (data já foi preenchida na etapa 6)
+      logger.info("=== ETAPA 10: FINALIZAR PARCIAL ===");
       comprovantePath = await finalizarParcial(
         page,
         dados.sessao_id,
