@@ -284,6 +284,48 @@ export async function executarSessao(
       await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => {});
       await new Promise((r) => setTimeout(r, 2000));
 
+      // Preencher data no próximo campo série vazio (dt_serie_N)
+      // O portal exige a data preenchida antes de "Finalizar Parcial"
+      const proximoCampoNormal = await page.evaluate(() => {
+        for (let i = 1; i <= 10; i++) {
+          const el = document.getElementById(`dt_serie_${i}`) as HTMLInputElement | null;
+          if (!el) continue;
+          if (!el.value || el.value.trim() === '') return i;
+        }
+        return null;
+      });
+
+      if (proximoCampoNormal !== null) {
+        const dataExec = new Date(dados.data_execucao.includes("T") ? dados.data_execucao : dados.data_execucao + "T12:00:00");
+        const dd = String(dataExec.getDate()).padStart(2, "0");
+        const mm = String(dataExec.getMonth() + 1).padStart(2, "0");
+        const yyyy = dataExec.getFullYear();
+        const hh = String(dataExec.getHours()).padStart(2, "0");
+        const min = String(dataExec.getMinutes()).padStart(2, "0");
+        const dataHoraNormal = `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+        const campoIdNormal = `dt_serie_${proximoCampoNormal}`;
+
+        // Habilitar campo se disabled (campos 2-10 começam disabled)
+        await page.evaluate((id) => {
+          const el = document.getElementById(id) as HTMLInputElement | null;
+          if (el) {
+            el.disabled = false;
+            el.style.display = '';
+            const img = el.nextElementSibling;
+            if (img && img.tagName === 'IMG') (img as HTMLElement).style.display = '';
+          }
+        }, campoIdNormal);
+
+        await page.locator(`#${campoIdNormal}`).fill(dataHoraNormal);
+        await page.locator(`#${campoIdNormal}`).press("Tab");
+        await page.locator(`#${campoIdNormal}`).dispatchEvent("change");
+        await new Promise((r) => setTimeout(r, 1000));
+
+        logger.info({ campoId: campoIdNormal, valor: dataHoraNormal }, "data da série preenchida (fluxo normal)");
+      } else {
+        logger.warn("todos os 10 campos de série já preenchidos — prosseguindo sem preencher data");
+      }
+
       // 9-10. Finalizar Parcial + comprovante
       logger.info("=== ETAPAS 9-10: FINALIZAR PARCIAL ===");
       comprovantePath = await finalizarParcial(
