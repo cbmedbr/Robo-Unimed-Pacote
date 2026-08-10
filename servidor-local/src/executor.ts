@@ -389,6 +389,19 @@ async function atualizarJobComResultado(
         ? "em_analise"
         : "ativa";
 
+    // data_emissao = data que foi preenchida no SGU (dia 1 ou hoje se últimos 7 dias)
+    const dataEmissao = resultado.data_emissao_sgu || new Date().toISOString().slice(0, 10);
+    // mes_utilizacao = mês para o qual a guia vale (ex: 2026-08-01)
+    const mesUtilizacao = resultado.mes_utilizacao || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
+
+    // data_validade = dia 7 do mês seguinte ao mes_utilizacao
+    let dataValidade: string | undefined;
+    if (!negada) {
+      const mesUtil = new Date(mesUtilizacao + "T12:00:00");
+      const validadeDate = new Date(mesUtil.getFullYear(), mesUtil.getMonth() + 1, 7);
+      dataValidade = validadeDate.toISOString().slice(0, 10);
+    }
+
     const { data: novaGuia, error: guiaErr } = await supabase
       .from("guias")
       .insert({
@@ -398,14 +411,9 @@ async function atualizarJobComResultado(
         plano_saude_id: job.plano_saude_id_snapshot,
         sessoes_autorizadas: job.procedimento_quantidade,
         sessoes_executadas: 0,
-        data_emissao: new Date().toISOString().slice(0, 10),
-        // Validade: 60 dias por padrão (Unimed dá ~60 dias pra psicoterapia)
-        // Guia negada não tem validade
-        ...(negada ? {} : {
-          data_validade: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000)
-            .toISOString()
-            .slice(0, 10),
-        }),
+        data_emissao: dataEmissao,
+        mes_utilizacao: mesUtilizacao,
+        ...(dataValidade ? { data_validade: dataValidade } : {}),
         status: statusGuia,
         ...(negada ? { observacoes: "Guia negada automaticamente pelo portal Unimed" } : {}),
       })

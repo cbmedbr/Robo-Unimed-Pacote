@@ -30,13 +30,9 @@ export interface ResultadoRobo {
   sucesso: boolean;
   numero_guia?: string;
   senha_autorizacao?: string;
-  /**
-   * Situação da guia retornada pela Unimed.
-   * - "APROVADO": guia autorizada normalmente
-   * - "EM_ANALISE": gerada mas aguarda análise manual da Unimed
-   * Só preenchido em caso de sucesso.
-   */
-  situacao?: "APROVADO" | "EM_ANALISE";
+  situacao?: "APROVADO" | "EM_ANALISE" | "NEGADA";
+  data_emissao_sgu?: string;
+  mes_utilizacao?: string;
   comprovante_path?: string;
   erro_codigo?: string;
   erro_mensagem?: string;

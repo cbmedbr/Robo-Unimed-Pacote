@@ -101,14 +101,10 @@ export interface ResultadoSucesso {
   sucesso: true;
   numero_guia: string;
   data_autorizacao: string;
+  data_emissao_sgu: string;
+  mes_utilizacao: string;
   screenshot_comprovante_path: string | null;
   senha_autorizacao?: string | null;
-  /**
-   * Situação da guia na Unimed após geração.
-   *  - "APROVADO": guia autorizada normalmente, pode ser usada
-   *  - "EM_ANALISE": guia gerada mas aguarda análise manual da Unimed
-   *    (recepcionista precisa acompanhar até virar autorizada)
-   */
   situacao: "APROVADO" | "EM_ANALISE" | "NEGADA";
   duracao_ms: number;
 }

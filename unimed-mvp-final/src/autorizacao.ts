@@ -81,10 +81,28 @@ export async function executarAutorizacao(
       "autorização concluída"
     );
 
+    // Calcula mes_utilizacao e data_emissao_sgu
+    const hojeCalc = new Date();
+    const ultimoDia = new Date(hojeCalc.getFullYear(), hojeCalc.getMonth() + 1, 0).getDate();
+    const diasRestantes = ultimoDia - hojeCalc.getDate();
+    const ehProximoMes = diasRestantes < 7;
+
+    let mesUtil: Date;
+    let dataEmissaoSgu: Date;
+    if (ehProximoMes) {
+      mesUtil = new Date(hojeCalc.getFullYear(), hojeCalc.getMonth() + 1, 1);
+      dataEmissaoSgu = hojeCalc;
+    } else {
+      mesUtil = new Date(hojeCalc.getFullYear(), hojeCalc.getMonth(), 1);
+      dataEmissaoSgu = new Date(hojeCalc.getFullYear(), hojeCalc.getMonth(), 1);
+    }
+
     return {
       sucesso: true,
       numero_guia,
       data_autorizacao,
+      data_emissao_sgu: dataEmissaoSgu.toISOString().slice(0, 10),
+      mes_utilizacao: mesUtil.toISOString().slice(0, 10),
       screenshot_comprovante_path,
       senha_autorizacao,
       situacao,
@@ -182,32 +200,47 @@ async function preencherCamposBasicos(
     // continua mesmo se não achar
   }
 
-  // Data de emissão + Data de solicitação: hoje (formato dd/MM/yyyy)
+  // Data de emissão + Data de solicitação
+  // Regra: se estamos ATÉ 7 dias antes do fim do mês → data = dia 1 do mês atual
+  //        se estamos nos ÚLTIMOS 7 dias do mês → data = hoje (guia é do mês seguinte)
   const hoje = new Date();
-  const dd = String(hoje.getDate()).padStart(2, "0");
-  const mm = String(hoje.getMonth() + 1).padStart(2, "0");
-  const yyyy = hoje.getFullYear();
-  const dataHoje = `${dd}/${mm}/${yyyy}`;
+  const ultimoDiaMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
+  const diasAteFimMes = ultimoDiaMes - hoje.getDate();
+  const nosUltimos7Dias = diasAteFimMes < 7;
+
+  let dataParaSGU: Date;
+  if (nosUltimos7Dias) {
+    dataParaSGU = hoje;
+    logger.info({ diasAteFimMes }, "últimos 7 dias do mês — guia é do mês seguinte, data fica hoje");
+  } else {
+    dataParaSGU = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    logger.info({ diasAteFimMes }, "mais de 7 dias até o fim do mês — data ajustada para dia 1");
+  }
+
+  const dd = String(dataParaSGU.getDate()).padStart(2, "0");
+  const mm = String(dataParaSGU.getMonth() + 1).padStart(2, "0");
+  const yyyy = dataParaSGU.getFullYear();
+  const dataFormatada = `${dd}/${mm}/${yyyy}`;
 
   try {
-    await page.locator('#DT_EMISSAO_GUIA').fill(dataHoje);
+    await page.locator('#DT_EMISSAO_GUIA').fill(dataFormatada);
     await page.locator('#DT_EMISSAO_GUIA').press("Tab");
-    logger.info({ dataEmissao: dataHoje }, "campo Data de emissão preenchido");
+    logger.info({ dataEmissao: dataFormatada }, "campo Data de emissão preenchido");
   } catch (err) {
     logger.warn({ err: (err as Error).message }, "campo Data de emissão não preenchido");
   }
 
   // Data da Solicitação — formato dd/MM/yyyy HH:mm (com hora)
-  const dataHojeComHora = `${dataHoje} 00:00`;
+  const dataComHora = `${dataFormatada} 00:00`;
   try {
-    await page.locator('#DT_SOLICITACAO').fill(dataHojeComHora);
+    await page.locator('#DT_SOLICITACAO').fill(dataComHora);
     await page.locator('#DT_SOLICITACAO').press("Tab");
-    logger.info({ dataSolicitacao: dataHojeComHora }, "campo Data da Solicitação preenchido");
+    logger.info({ dataSolicitacao: dataComHora }, "campo Data da Solicitação preenchido");
   } catch {
     try {
-      await page.locator('input[name="DT_SOLICITACAO"]').fill(dataHojeComHora);
+      await page.locator('input[name="DT_SOLICITACAO"]').fill(dataComHora);
       await page.locator('input[name="DT_SOLICITACAO"]').press("Tab");
-      logger.info({ dataSolicitacao: dataHojeComHora }, "campo Data da Solicitação preenchido (via name)");
+      logger.info({ dataSolicitacao: dataComHora }, "campo Data da Solicitação preenchido (via name)");
     } catch (err2) {
       logger.warn({ err: (err2 as Error).message }, "campo Data da Solicitação não preenchido");
     }
