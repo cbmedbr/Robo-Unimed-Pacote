@@ -20,6 +20,7 @@ export interface UnimedJob {
   procedimento_quantidade: number;
   pedido_medico_path_snapshot: string;
   psicologo_executante_nome: string | null;
+  is_primeira_guia: boolean;
 
   status: "pendente" | "executando" | "sucesso" | "falhou" | "cancelado";
   tentativa: number;
@@ -65,4 +66,5 @@ export interface InputAutorizacaoRobo {
   especialidade_pedido: string;
   pedido_medico_path: string;
   psicologo_executante_nome?: string;
+  is_primeira_guia?: boolean;
 }

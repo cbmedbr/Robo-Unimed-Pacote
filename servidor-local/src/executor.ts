@@ -135,6 +135,7 @@ async function jobParaInputRobo(job: UnimedJob): Promise<{
     especialidade_pedido: especialidade,
     pedido_medico_path: pdfLocal,
     psicologo_executante_nome: job.psicologo_executante_nome || undefined,
+    is_primeira_guia: job.is_primeira_guia ?? false,
   };
 
   return { input, pdfLocalPath: pdfLocal };
@@ -394,12 +395,21 @@ async function atualizarJobComResultado(
     // mes_utilizacao = mês para o qual a guia vale (ex: 2026-08-01)
     const mesUtilizacao = resultado.mes_utilizacao || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
 
-    // data_validade = dia 7 do mês seguinte ao mes_utilizacao
+    // data_validade:
+    //   Renovação:     dia 7 do mês seguinte ao mes_utilizacao
+    //   Primeira guia: fim do mês seguinte ao mes_utilizacao + 7 dias
+    //     Ex: primeira guia em 25/ago → mes_utilizacao=ago → validade = 07/out
+    //     (cobre agosto + setembro inteiro + 7 dias em outubro)
     let dataValidade: string | undefined;
     if (!negada) {
       const mesUtil = new Date(mesUtilizacao + "T12:00:00");
-      const validadeDate = new Date(mesUtil.getFullYear(), mesUtil.getMonth() + 1, 7);
-      dataValidade = validadeDate.toISOString().slice(0, 10);
+      if (job.is_primeira_guia) {
+        const validadeDate = new Date(mesUtil.getFullYear(), mesUtil.getMonth() + 2, 7);
+        dataValidade = validadeDate.toISOString().slice(0, 10);
+      } else {
+        const validadeDate = new Date(mesUtil.getFullYear(), mesUtil.getMonth() + 1, 7);
+        dataValidade = validadeDate.toISOString().slice(0, 10);
+      }
     }
 
     const { data: novaGuia, error: guiaErr } = await supabase

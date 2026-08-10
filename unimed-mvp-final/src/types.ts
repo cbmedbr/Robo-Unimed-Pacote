@@ -33,6 +33,7 @@ export interface InputAutorizacao {
   especialidade_pedido: string;
   pedido_medico_path: string;
   psicologo_executante_nome?: string;
+  is_primeira_guia?: boolean;
 }
 
 /**

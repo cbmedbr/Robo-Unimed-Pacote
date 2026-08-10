@@ -89,7 +89,11 @@ export async function executarAutorizacao(
 
     let mesUtil: Date;
     let dataEmissaoSgu: Date;
-    if (ehProximoMes) {
+    if (input.is_primeira_guia) {
+      // Primeira guia: mes_utilizacao = mês atual (guia vale a partir de hoje)
+      mesUtil = new Date(hojeCalc.getFullYear(), hojeCalc.getMonth(), 1);
+      dataEmissaoSgu = hojeCalc;
+    } else if (ehProximoMes) {
       mesUtil = new Date(hojeCalc.getFullYear(), hojeCalc.getMonth() + 1, 1);
       dataEmissaoSgu = hojeCalc;
     } else {
@@ -201,15 +205,20 @@ async function preencherCamposBasicos(
   }
 
   // Data de emissão + Data de solicitação
-  // Regra: se estamos ATÉ 7 dias antes do fim do mês → data = dia 1 do mês atual
-  //        se estamos nos ÚLTIMOS 7 dias do mês → data = hoje (guia é do mês seguinte)
+  // Primeira guia: data = hoje (não retroativa — precisa valer a partir de agora)
+  // Renovação:
+  //   se estamos ATÉ 7 dias antes do fim do mês → data = dia 1 do mês atual
+  //   se estamos nos ÚLTIMOS 7 dias do mês → data = hoje (guia é do mês seguinte)
   const hoje = new Date();
   const ultimoDiaMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
   const diasAteFimMes = ultimoDiaMes - hoje.getDate();
   const nosUltimos7Dias = diasAteFimMes < 7;
 
   let dataParaSGU: Date;
-  if (nosUltimos7Dias) {
+  if (input.is_primeira_guia) {
+    dataParaSGU = hoje;
+    logger.info("primeira guia — data fica hoje (não retroativa)");
+  } else if (nosUltimos7Dias) {
     dataParaSGU = hoje;
     logger.info({ diasAteFimMes }, "últimos 7 dias do mês — guia é do mês seguinte, data fica hoje");
   } else {
