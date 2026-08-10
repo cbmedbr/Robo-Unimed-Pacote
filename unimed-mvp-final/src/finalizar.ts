@@ -337,61 +337,53 @@ async function garantirProfissionalExecutante(page: Page, config: Config, input:
   const nomeBusca = input.psicologo_executante_nome;
   logger.info({ nomeBusca }, "garantindo profissional executante");
 
-  // Preenche "Data do Atendimento" — mesma data retroativa dos outros 2 campos
+  // "Data do Atendimento" — só preenche em autorização retroativa (dia 1).
+  // Primeira guia e últimos 7 dias usam data de hoje, que já vem preenchida.
   const hoje = new Date();
   const ultimoDiaMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
   const diasAteFimMes = ultimoDiaMes - hoje.getDate();
-  let dataAtend: Date;
-  if (input.is_primeira_guia) {
-    dataAtend = hoje;
-  } else if (diasAteFimMes < 7) {
-    dataAtend = hoje;
-  } else {
-    dataAtend = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-  }
-  const dd = String(dataAtend.getDate()).padStart(2, "0");
-  const mm = String(dataAtend.getMonth() + 1).padStart(2, "0");
-  const yyyy = dataAtend.getFullYear();
-  const dataAtendFormatada = `${dd}/${mm}/${yyyy} 00:00`;
+  const ehRetroativo = !input.is_primeira_guia && diasAteFimMes >= 7;
 
-  const seletoresDataAtend = [
-    '#DT_ATENDIMENTO',
-    'input[name="DT_ATENDIMENTO"]',
-    '#DT_ATEND',
-    'input[name="DT_ATEND"]',
-    '#DT_INI_FATURAMENTO',
-    'input[name="DT_INI_FATURAMENTO"]',
-  ];
-  let dataAtendPreenchida = false;
-  for (const sel of seletoresDataAtend) {
-    try {
-      const elem = page.locator(sel).first();
-      const visivel = await elem.isVisible({ timeout: 1000 });
-      if (visivel) {
-        await elem.fill(dataAtendFormatada);
-        await elem.press("Tab");
-        logger.info({ seletor: sel, data: dataAtendFormatada }, "campo Data do Atendimento preenchido");
-        dataAtendPreenchida = true;
-        break;
-      }
-    } catch {
-      // próximo seletor
+  if (ehRetroativo) {
+    const dataAtend = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    const dd = String(dataAtend.getDate()).padStart(2, "0");
+    const mm = String(dataAtend.getMonth() + 1).padStart(2, "0");
+    const dataAtendFormatada = `${dd}/${mm}/${dataAtend.getFullYear()} 00:00`;
+
+    const seletoresDataAtend = [
+      '#DT_ATENDIMENTO', 'input[name="DT_ATENDIMENTO"]',
+      '#DT_ATEND', 'input[name="DT_ATEND"]',
+      '#DT_INI_FATURAMENTO', 'input[name="DT_INI_FATURAMENTO"]',
+    ];
+    let preenchido = false;
+    for (const sel of seletoresDataAtend) {
+      try {
+        const elem = page.locator(sel).first();
+        if (await elem.isVisible({ timeout: 1000 })) {
+          await elem.fill(dataAtendFormatada);
+          await elem.press("Tab");
+          logger.info({ seletor: sel, data: dataAtendFormatada }, "campo Data do Atendimento preenchido (retroativo)");
+          preenchido = true;
+          break;
+        }
+      } catch { /* próximo */ }
     }
-  }
-  if (!dataAtendPreenchida) {
-    logger.warn("campo Data do Atendimento não encontrado por ID — tentando por label");
-    try {
-      const elem = page.locator('td:has-text("Data do Atendimento") input, td:has-text("Data do atendimento") input').first();
-      const visivel = await elem.isVisible({ timeout: 2000 });
-      if (visivel) {
-        await elem.fill(dataAtendFormatada);
-        await elem.press("Tab");
-        logger.info({ data: dataAtendFormatada }, "campo Data do Atendimento preenchido (via label)");
-        dataAtendPreenchida = true;
-      }
-    } catch {
-      logger.warn("campo Data do Atendimento não encontrado nem por label — continuando sem preencher");
+    if (!preenchido) {
+      try {
+        const elem = page.locator('td:has-text("Data do Atendimento") input, td:has-text("Data do atendimento") input').first();
+        if (await elem.isVisible({ timeout: 2000 })) {
+          await elem.fill(dataAtendFormatada);
+          await elem.press("Tab");
+          logger.info({ data: dataAtendFormatada }, "campo Data do Atendimento preenchido via label (retroativo)");
+          preenchido = true;
+        }
+      } catch { /* ignora */ }
     }
+    if (!preenchido) {
+      logger.warn("campo Data do Atendimento não encontrado — continuando sem preencher");
+    }
+  } else {
+    logger.info("Data do Atendimento não alterada (primeira guia ou últimos 7 dias — campo usa data atual)");
   }
 
   // Normaliza acentos (CRM pode ter "Débora", SGU tem "DEBORA")
