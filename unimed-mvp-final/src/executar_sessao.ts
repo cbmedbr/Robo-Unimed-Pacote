@@ -116,6 +116,7 @@ export async function executarSessao(
         const el = document.getElementById(id) as HTMLInputElement | null;
         if (el) {
           el.disabled = false;
+          el.removeAttribute('readonly');
           el.style.display = '';
           const img = el.nextElementSibling;
           if (img && img.tagName === 'IMG') (img as HTMLElement).style.display = '';

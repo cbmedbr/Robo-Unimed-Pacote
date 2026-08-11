@@ -360,6 +360,10 @@ async function garantirProfissionalExecutante(page: Page, config: Config, input:
       try {
         const elem = page.locator(sel).first();
         if (await elem.isVisible({ timeout: 1000 })) {
+          await page.evaluate((s) => {
+            const el = document.querySelector(s) as HTMLInputElement | null;
+            if (el) el.removeAttribute('readonly');
+          }, sel);
           await elem.fill(dataAtendFormatada);
           await elem.press("Tab");
           logger.info({ seletor: sel, data: dataAtendFormatada }, "campo Data do Atendimento preenchido (retroativo)");
@@ -372,6 +376,7 @@ async function garantirProfissionalExecutante(page: Page, config: Config, input:
       try {
         const elem = page.locator('td:has-text("Data do Atendimento") input, td:has-text("Data do atendimento") input').first();
         if (await elem.isVisible({ timeout: 2000 })) {
+          await elem.evaluate((el: HTMLInputElement) => el.removeAttribute('readonly'));
           await elem.fill(dataAtendFormatada);
           await elem.press("Tab");
           logger.info({ data: dataAtendFormatada }, "campo Data do Atendimento preenchido via label (retroativo)");
