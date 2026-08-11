@@ -232,6 +232,10 @@ async function preencherCamposBasicos(
   const dataFormatada = `${dd}/${mm}/${yyyy}`;
 
   try {
+    await page.evaluate(() => {
+      const el = document.getElementById('DT_EMISSAO_GUIA') as HTMLInputElement | null;
+      if (el) { el.removeAttribute('readonly'); el.value = ''; }
+    });
     await page.locator('#DT_EMISSAO_GUIA').fill(dataFormatada);
     await page.locator('#DT_EMISSAO_GUIA').press("Tab");
     logger.info({ dataEmissao: dataFormatada }, "campo Data de emissão preenchido");
@@ -242,11 +246,19 @@ async function preencherCamposBasicos(
   // Data da Solicitação — formato dd/MM/yyyy HH:mm (com hora)
   const dataComHora = `${dataFormatada} 00:00`;
   try {
+    await page.evaluate(() => {
+      const el = document.getElementById('DT_SOLICITACAO') as HTMLInputElement | null;
+      if (el) { el.removeAttribute('readonly'); el.value = ''; }
+    });
     await page.locator('#DT_SOLICITACAO').fill(dataComHora);
     await page.locator('#DT_SOLICITACAO').press("Tab");
     logger.info({ dataSolicitacao: dataComHora }, "campo Data da Solicitação preenchido");
   } catch {
     try {
+      await page.evaluate(() => {
+        const el = document.querySelector('input[name="DT_SOLICITACAO"]') as HTMLInputElement | null;
+        if (el) { el.removeAttribute('readonly'); el.value = ''; }
+      });
       await page.locator('input[name="DT_SOLICITACAO"]').fill(dataComHora);
       await page.locator('input[name="DT_SOLICITACAO"]').press("Tab");
       logger.info({ dataSolicitacao: dataComHora }, "campo Data da Solicitação preenchido (via name)");
