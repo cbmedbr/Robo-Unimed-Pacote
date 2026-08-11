@@ -83,9 +83,9 @@ export async function executarSessao(
       registrarDialogHandler(novaPagina);
     });
 
-    // Função auxiliar: preenche a data no próximo campo dt_serie_N vazio
-    async function preencherDataSerie() {
-      const proximoCampo = await page.evaluate(() => {
+    // Função auxiliar: identifica o próximo campo dt_serie_N vazio
+    async function encontrarProximoCampoSerie(): Promise<number | null> {
+      return page.evaluate(() => {
         for (let i = 1; i <= 10; i++) {
           const el = document.getElementById(`dt_serie_${i}`) as HTMLInputElement | null;
           if (!el) continue;
@@ -93,6 +93,11 @@ export async function executarSessao(
         }
         return null;
       });
+    }
+
+    // Preenche dt_serie_N. Se campoAlvo é dado, sobrescreve (portal pode ter auto-preenchido).
+    async function preencherDataSerie(campoAlvo?: number | null) {
+      const proximoCampo = campoAlvo ?? await encontrarProximoCampoSerie();
 
       if (proximoCampo === null) {
         throw new RoboError(
@@ -117,6 +122,7 @@ export async function executarSessao(
         if (el) {
           el.disabled = false;
           el.removeAttribute('readonly');
+          el.value = '';
           el.style.display = '';
           const img = el.nextElementSibling;
           if (img && img.tagName === 'IMG') (img as HTMLElement).style.display = '';
@@ -236,6 +242,10 @@ export async function executarSessao(
       // === FLUXO NORMAL: popup + QR Code (token) → preencher data → Finalizar Parcial ===
       const popup = resultado.page;
 
+      // Identifica o campo ANTES do QR — portal pode auto-preencher durante o token
+      const campoAlvo = await encontrarProximoCampoSerie();
+      logger.info({ campoAlvo }, "campo dt_serie alvo identificado antes do QR");
+
       registrarDialogHandler(popup);
 
       await popup.addInitScript(() => {
@@ -270,9 +280,9 @@ export async function executarSessao(
       await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => {});
       await new Promise((r) => setTimeout(r, 2000));
 
-      // 9. Preencher data (calendário só aparece DEPOIS do token/QR Code)
+      // 9. Preencher data — sobrescreve o campo-alvo (portal pode ter auto-preenchido com data atual)
       logger.info("=== ETAPA 9: PREENCHER DATA DA SESSÃO (pós-token) ===");
-      await preencherDataSerie();
+      await preencherDataSerie(campoAlvo);
 
       // 10. Finalizar Parcial + comprovante
       logger.info("=== ETAPA 10: FINALIZAR PARCIAL ===");
