@@ -120,33 +120,35 @@ function rodarSubprocesso(jobId: string, inputPath: string): Promise<ResultadoEx
 
     proc.on("close", (code) => {
       clearTimeout(timeout);
+      const duracao = Date.now() - inicioMs;
 
-      // Tentar parsear JSON do stdout
-      try {
-        const match = stdoutTotal.match(/\{[\s\S]*"sucesso"\s*:/);
-        if (match) {
-          const jsonStart = stdoutTotal.indexOf("{", stdoutTotal.indexOf("RESULTADO"));
-          if (jsonStart >= 0) {
-            const parsed = JSON.parse(stdoutTotal.slice(jsonStart));
-            resolverUmaVez({
-              ...parsed,
-              duracao_ms: Date.now() - inicioMs,
-            });
-            return;
-          }
-        }
-      } catch {}
+      // Parsear JSON do stdout — mesmo padrão robusto do executor.ts
+      let parsed: any = null;
+      const idxMarcador = stdoutTotal.lastIndexOf("=== RESULTADO ===");
+      const trecho = idxMarcador >= 0 ? stdoutTotal.substring(idxMarcador) : stdoutTotal;
 
-      if (code === 0) {
-        resolverUmaVez({ sucesso: true, duracao_ms: Date.now() - inicioMs });
-      } else {
-        resolverUmaVez({
-          sucesso: false,
-          erro_codigo: "PROCESSO_FALHOU",
-          erro_mensagem: stderrTotal.slice(-500) || `Processo saiu com código ${code}`,
-          duracao_ms: Date.now() - inicioMs,
-        });
+      const idxAbre = trecho.indexOf("{");
+      const idxFecha = trecho.lastIndexOf("}");
+      if (idxAbre >= 0 && idxFecha > idxAbre) {
+        try {
+          parsed = JSON.parse(trecho.substring(idxAbre, idxFecha + 1));
+        } catch {}
       }
+
+      if (parsed && typeof parsed === "object" && typeof parsed.sucesso === "boolean") {
+        resolverUmaVez({ ...parsed, duracao_ms: parsed.duracao_ms ?? duracao });
+        return;
+      }
+
+      // Fallback: sem JSON válido → SEMPRE falha (nunca assumir sucesso por exit code)
+      resolverUmaVez({
+        sucesso: false,
+        erro_codigo: code === 0 ? "RESULTADO_NAO_PARSEAVEL" : "PROCESSO_FALHOU",
+        erro_mensagem: code === 0
+          ? "Robô terminou mas não produziu resultado JSON válido"
+          : `Processo saiu com código ${code}. Stderr: ${stderrTotal.slice(-500)}`,
+        duracao_ms: duracao,
+      });
     });
   });
 }
