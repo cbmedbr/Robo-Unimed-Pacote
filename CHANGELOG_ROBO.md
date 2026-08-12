@@ -4,6 +4,29 @@
 
 ---
 
+## 12/08/2026
+
+### Doc: fluxos de negócio registrados como fonte da verdade
+**Arquivos:** `FLUXOS_NEGOCIO.md` (novo), `CLAUDE.md` (novo), `DOCUMENTACAO_ROBO.md`
+- SOP da operação (execução local com token, execução intercâmbio sem token, autorização retroativa) documentado passo a passo
+- Corrigida a seção "FLUXO SÉRIE" da documentação, que ainda dizia "Gravar e Finalizar" (`#Button_Submit`) — o código usa `#Button_Parcial` desde 04/08
+
+### Fix: sessão gravada no dia anterior ao realizado (erro de fuso horário)
+**Arquivos:** `unimed-mvp-final/src/executar_sessao.ts`
+- `new Date("2026-08-12T00:00:00+00:00")` era convertido para 11/08 21:00 no fuso de Brasília (UTC-3), e o robô gravava `dt_serie_N` no **dia errado**
+- Ocorria sempre que o CRM mandava `data_execucao` como timestamp UTC (coluna `timestamptz` do Supabase) em vez de data pura
+- Nova função `formatarDataSerie()`: datas de calendário (`YYYY-MM-DD` ou meia-noite UTC) são lidas literalmente da string; só instantes com hora real passam por conversão de fuso
+- A data recebida do CRM agora aparece no log junto com a data formatada
+
+### Fix: robô reportava sucesso sem o portal ter gravado a execução (fluxo série)
+**Arquivos:** `unimed-mvp-final/src/executar_sessao.ts`, `DOCUMENTACAO_ROBO.md`
+- Se a tela de sucesso não aparecesse mas o botão "Confirmar" tivesse sido clicado, o robô apenas logava um warning e retornava `sucesso: true`
+- O servidor então marcava o agendamento como **executado no CRM** e incrementava `sessoes_executadas`, enquanto na Unimed a guia continuava em aberto
+- Agora: 3 tentativas de 5s procurando a tela de sucesso (mesmo padrão do fluxo normal) e, se não encontrar, lança `FINALIZACAO_EXECUCAO_FALHOU`
+- A mensagem de erro do portal (ex: "devem existir itens executados") é capturada e incluída no erro, mais screenshot de diagnóstico
+
+---
+
 ## 04/08/2026
 
 ### Fix: CRM não marcava agendamento como executado após sucesso no portal

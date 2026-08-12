@@ -12,6 +12,46 @@ import { finalizarParcial } from "./execucao/finalizar";
 import { DadosExecucao, ResultadoExecucao, RoboError } from "./execucao/tipos";
 
 /**
+ * Converte a data de execução recebida do CRM para o formato do portal
+ * (`dd/MM/yyyy HH:mm`), preservando o DIA em que a sessão foi realizada.
+ *
+ * O CRM pode mandar três formatos:
+ *   "2026-08-12"                → data pura
+ *   "2026-08-12T00:00:00+00:00" → coluna timestamptz do Supabase = data pura serializada em UTC
+ *   "2026-08-12T14:30:00-03:00" → instante real, com a hora do agendamento
+ *
+ * Os dois primeiros representam um DIA DE CALENDÁRIO, não um instante. Passá-los
+ * por `new Date()` os converte para o fuso local (UTC-3) e joga a data para
+ * 11/08 21:00 — o robô gravava a sessão no dia ERRADO no portal. Por isso a data
+ * pura é lida literalmente da string; só instantes com hora real são convertidos.
+ */
+export function formatarDataSerie(valor: string): string {
+  const soData = valor.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const meiaNoiteUtc = valor.match(
+    /^(\d{4})-(\d{2})-(\d{2})T00:00(?::00(?:\.\d+)?)?(?:Z|[+-]00:00)$/
+  );
+  const diaDeCalendario = soData ?? meiaNoiteUtc;
+
+  if (diaDeCalendario) {
+    const [, yyyy, mm, dd] = diaDeCalendario;
+    return `${dd}/${mm}/${yyyy} 12:00`;
+  }
+
+  const d = new Date(valor);
+  if (Number.isNaN(d.getTime())) {
+    throw new RoboError(
+      "DATA_EXECUCAO_INVALIDA",
+      `data_execucao inválida: "${valor}" — não é possível determinar o dia da sessão`
+    );
+  }
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  return `${dd}/${mm}/${d.getFullYear()} ${hh}:${min}`;
+}
+
+/**
  * Orquestrador principal do robô de execução de sessões.
  *
  * Fluxo: login → buscar guia → preparar → popup cartão → QR Code → finalizar parcial
@@ -106,16 +146,13 @@ export async function executarSessao(
         );
       }
 
-      const dataExec = new Date(dados.data_execucao.includes("T") ? dados.data_execucao : dados.data_execucao + "T12:00:00");
-      const dd = String(dataExec.getDate()).padStart(2, "0");
-      const mm = String(dataExec.getMonth() + 1).padStart(2, "0");
-      const yyyy = dataExec.getFullYear();
-      const hh = String(dataExec.getHours()).padStart(2, "0");
-      const min = String(dataExec.getMinutes()).padStart(2, "0");
-      const dataHoraSerie = `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+      const dataHoraSerie = formatarDataSerie(dados.data_execucao);
 
       const campoId = `dt_serie_${proximoCampo}`;
-      logger.info({ campoId, dataHoraSerie }, "preenchendo campo da série");
+      logger.info(
+        { campoId, dataHoraSerie, dataRecebida: dados.data_execucao },
+        "preenchendo campo da série"
+      );
 
       await page.evaluate((id) => {
         const el = document.getElementById(id) as HTMLInputElement | null;
@@ -205,28 +242,56 @@ export async function executarSessao(
       }
 
       await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => {});
-      await new Promise((r) => setTimeout(r, 3000));
 
+      // Procura a tela de sucesso com retry — o portal pode demorar a processar.
+      // Mesmo padrão do fluxo normal (finalizarParcial): 3 tentativas de 5s.
       let paginaSucesso: import("playwright").Page | null = null;
-      for (const p of context.pages()) {
-        if (p.isClosed()) continue;
-        const url = p.url();
-        const temSucesso = url.includes("sucesso") ||
-          await p.locator('text=/Opera[çc][ãa]o realizada com sucesso/i').first().isVisible({ timeout: 2000 }).catch(() => false);
-        if (temSucesso) {
-          paginaSucesso = p;
-          logger.info({ url }, "tela de sucesso encontrada!");
-          break;
+      for (let tentativa = 0; tentativa < 3 && !paginaSucesso; tentativa++) {
+        await new Promise((r) => setTimeout(r, 5000));
+        for (const p of context.pages()) {
+          if (p.isClosed()) continue;
+          const url = p.url();
+          const temSucesso = url.includes("sucesso") ||
+            await p.locator('text=/Opera[çc][ãa]o realizada com sucesso/i').first().isVisible({ timeout: 2000 }).catch(() => false);
+          if (temSucesso) {
+            paginaSucesso = p;
+            logger.info({ url, tentativa }, "tela de sucesso encontrada!");
+            break;
+          }
         }
+        if (!paginaSucesso) logger.info({ tentativa }, "tela de sucesso não encontrada, tentando novamente...");
       }
 
-      if (paginaSucesso) {
-        logger.info("execução finalizada com sucesso no portal (série)");
-      } else if (!confirmouMsg) {
-        throw new RoboError("EXECUCAO_FALHOU", "Confirmação não foi clicada e tela de sucesso não apareceu — execução NÃO gravada");
-      } else {
-        logger.warn("tela de sucesso NÃO encontrada (série) mas confirmação foi clicada — verificar manualmente");
+      if (!paginaSucesso) {
+        // NUNCA reportar sucesso sem confirmação do portal: o servidor marca o
+        // agendamento como executado no CRM em cima deste retorno, e o operador
+        // só descobre a divergência quando a Unimed cobra a sessão que não existe.
+        // Antes de falhar, procura a mensagem de erro do portal para o operador
+        // saber o que corrigir (ex: data fora da validade da guia).
+        let motivoPortal = "";
+        for (const p of context.pages()) {
+          if (p.isClosed()) continue;
+          const texto = await p.locator('text=/devem existir itens executados|n[ãa]o (?:é|e) permitido|data.*inv[áa]lida|Erro!/i')
+            .first()
+            .textContent({ timeout: 2000 })
+            .catch(() => null);
+          if (texto) { motivoPortal = texto.replace(/\s+/g, " ").trim(); break; }
+        }
+
+        const nomeErro = `exec-falha-serie-${dados.sessao_id}-${Date.now()}.png`;
+        try {
+          await page.screenshot({ path: path.join(comprovantesDir, nomeErro), fullPage: true });
+        } catch {}
+
+        throw new RoboError(
+          "FINALIZACAO_EXECUCAO_FALHOU",
+          `Tela de sucesso NÃO encontrada após Finalizar Parcial (série) — a execução NÃO foi gravada no portal.` +
+            ` Confirmação clicada: ${confirmouMsg ? "sim" : "não"}.` +
+            (motivoPortal ? ` Mensagem do portal: "${motivoPortal}".` : "")
+        );
       }
+
+      logger.info("execução finalizada com sucesso no portal (série)");
 
       const paginaComprovante = paginaSucesso || page;
       const nomeArquivo = `exec-${dados.sessao_id}-${Date.now()}.png`;

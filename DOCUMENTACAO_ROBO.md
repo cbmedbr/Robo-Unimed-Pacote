@@ -1,7 +1,11 @@
 # Documentação Completa — Robô Unimed
 
-> **Última atualização:** 20/07/2026  
+> **Última atualização:** 12/08/2026  
 > **REGRA:** Toda alteração no robô DEVE atualizar este documento. Antes de modificar qualquer arquivo do robô, leia este documento inteiro para entender o funcionamento completo.
+>
+> **Este documento descreve *como* o robô está implementado.** O processo de negócio (*o que* precisa
+> ser feito no portal, na ordem exata definida pela operação) está em **`FLUXOS_NEGOCIO.md`** — leia-o
+> antes deste. Em caso de conflito entre os dois, o `FLUXOS_NEGOCIO.md` vence.
 
 ---
 
@@ -238,12 +242,16 @@ O formulário de série tem 10 campos `dt_serie_1` a `dt_serie_10` na seção "D
 1. **Encontra o próximo `dt_serie_N` vazio** (1 a 10)
 2. **Habilita o campo** se estiver disabled (`el.disabled = false`)
 3. **Preenche com data/hora** da sessão (formato `dd/MM/yyyy HH:mm`) + dispara evento `change`
-4. Clica `#Button_Submit` ("Gravar e Finalizar")
+4. Clica `input#Button_Parcial` ("Finalizar Parcial")
 5. Detecta nova página `finalizar_msg.do` (popup de confirmação HTML, não dialog JS)
 6. Clica `input[value="Confirmar"]` na `finalizar_msg.do`
-7. Aguarda processamento e tela de sucesso
+7. Procura a tela de sucesso com **3 tentativas de 5s**. Se não encontrar, lança
+   `FINALIZACAO_EXECUCAO_FALHOU` — **nunca** retorna sucesso sem confirmação do portal, porque o
+   servidor marca o agendamento como executado no CRM em cima desse retorno
 8. Captura screenshot comprovante
-9. **NÃO** chama `finalizarParcial` (o "Gravar e Finalizar" já faz tudo)
+
+> **Nunca** clicar em `#Button_Submit` ("Gravar e Finalizar") — regra da operação, ver `FLUXOS_NEGOCIO.md`.
+> A confirmação da sessão acontece na página `finalizar_msg.do` após o "Finalizar Parcial".
 
 **Nota:** O JS do portal (`verificarSubmit`) lê o último `dt_serie` preenchido e envia junto com o submit. Sem preencher ao menos um `dt_serie`, o portal retorna "Para gravar a guia, devem existir itens executados".
 
@@ -341,6 +349,8 @@ O formulário de série tem 10 campos `dt_serie_1` a `dt_serie_10` na seção "D
 | `POPUP_NAO_ABRIU` | Botão "Adicionar Execução Cartão" não encontrado |
 | `QR_CODE_INVALIDO` | Erro biométrico do portal |
 | `TIMEOUT_QR_CODE` | QR Code não escaneado em 3 minutos |
+| `FINALIZACAO_EXECUCAO_FALHOU` | Tela de sucesso não apareceu após "Finalizar Parcial" — execução NÃO gravada no portal |
+| `DATA_EXECUCAO_INVALIDA` | `data_execucao` recebida do CRM não permite determinar o dia da sessão |
 
 ### Servidor
 | Código | Causa |
