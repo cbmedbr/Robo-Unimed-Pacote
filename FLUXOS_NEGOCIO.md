@@ -60,7 +60,9 @@
 3. Campo **Data de atendimento**: apagar a data, deixar em branco.
 4. Campo **Nome do beneficiário**: digitar o nome do paciente.
 5. Clicar na **guia autorizada** correspondente ao paciente.
-   - Tipo de atendimento: **Outras terapias**
+   - Tipo de atendimento: **Outras terapias** → em intercâmbio este campo vem em branco
+     ("Selecione") e é **obrigatório**: precisa ser selecionado como *03 - Outras Terapias*, senão o
+     portal recusa a execução.
    - Regime de atendimento: **Ambulatorial**
 
 > **Importante:** para pacientes intercâmbio **não é necessária a apresentação do token** para

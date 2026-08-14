@@ -4,6 +4,19 @@
 
 ---
 
+## 14/08/2026
+
+### Fix: guia de paciente intercâmbio não executava por campo obrigatório em branco
+**Arquivos:** `unimed-mvp-final/src/execucao/preparar_execucao.ts`, `FLUXOS_NEGOCIO.md`, `DOCUMENTACAO_ROBO.md`
+- `prepararExecucao()` assumia que *Tipo de atendimento* vinha pré-preenchido pelo portal — verdade para paciente LOCAL, falso para INTERCÂMBIO, onde o campo aparece como "Selecione"
+- Sendo campo obrigatório, o portal recusava a execução da guia
+- Agora o robô sempre garante "03 - Outras Terapias", em vez de confiar no pré-preenchimento
+- O `<select>` é procurado por `DM_TP_ATEND_SADT` / `DM_TIPO_ATENDIMENTO` e, se não achar, por qualquer `<select>` que tenha uma opção "Outras Terapias" — o SGU usa nomes diferentes entre as telas de autorização e execução
+- Seleção é conferida depois de aplicada; novos erros `TIPO_ATENDIMENTO_NAO_ENCONTRADO`, `TIPO_ATENDIMENTO_SEM_OPCAO` e `TIPO_ATENDIMENTO_NAO_PREENCHIDO`
+- Tipo de atendimento é selecionado ANTES do regime, porque o portal recarrega parte do formulário ao mudar aquele campo
+
+---
+
 ## 12/08/2026
 
 ### Doc: fluxos de negócio registrados como fonte da verdade

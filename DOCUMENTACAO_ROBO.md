@@ -191,7 +191,16 @@ Mesmo `fazerLogin()` da autorização.
 ### Etapas 4-5: Preparar execução (`execucao/preparar_execucao.ts`)
 - Lê quantidade solicitada/autorizada dos campos `QT_SOLIC_1` e `QT_AUTORIZADA_1`
 - Se `qtAutorizadas === 0` → erro `SEM_SESSOES_DISPONIVEIS`
+- Seleciona **tipo de atendimento** → "03 - Outras Terapias". Em paciente LOCAL o portal já traz o
+  campo preenchido; em **INTERCÂMBIO ele vem em branco e é obrigatório** — sem ele o portal recusa a
+  execução. O robô sempre garante o valor em vez de confiar no pré-preenchimento.
+  - Procura o `<select>` por `DM_TP_ATEND_SADT` / `DM_TIPO_ATENDIMENTO` e, se não achar, por
+    qualquer `<select>` que tenha uma opção "Outras Terapias" (o SGU usa nomes diferentes entre as
+    telas de autorização e de execução)
+  - Confere o valor depois de selecionar; se não gravar → `TIPO_ATENDIMENTO_NAO_PREENCHIDO`
 - Seleciona regime: `select#DM_REGIME_ATEND` → "01 - Ambulatorial"
+  - Vem **depois** do tipo de atendimento: o portal recarrega parte do formulário ao mudar aquele
+    campo, o que limparia o regime se fosse selecionado antes
 
 ### Etapa 6: Abrir popup cartão (`execucao/abrir_popup_cartao.ts`)
 Salva dump HTML + screenshot para diagnóstico.
@@ -351,6 +360,9 @@ O formulário de série tem 10 campos `dt_serie_1` a `dt_serie_10` na seção "D
 | `TIMEOUT_QR_CODE` | QR Code não escaneado em 3 minutos |
 | `FINALIZACAO_EXECUCAO_FALHOU` | Tela de sucesso não apareceu após "Finalizar Parcial" — execução NÃO gravada no portal |
 | `DATA_EXECUCAO_INVALIDA` | `data_execucao` recebida do CRM não permite determinar o dia da sessão |
+| `TIPO_ATENDIMENTO_NAO_ENCONTRADO` | Campo obrigatório *Tipo de atendimento* não existe na tela de execução |
+| `TIPO_ATENDIMENTO_SEM_OPCAO` | O campo existe mas não oferece a opção "Outras Terapias" |
+| `TIPO_ATENDIMENTO_NAO_PREENCHIDO` | Seleção de "Outras Terapias" não foi aceita pelo portal |
 
 ### Servidor
 | Código | Causa |
