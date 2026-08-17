@@ -6,6 +6,15 @@
 
 ## 17/08/2026
 
+### Setup: script para trocar a senha da Unimed nos PCs da equipe
+**Arquivos:** `trocar-senha.bat` (novo), `trocar-senha.ps1` (novo), `LEIA-ME.txt`
+- Trocar a senha exigia abrir os dois `.env` no Bloco de Notas em cada PC — inviável para a recepção
+- `trocar-senha.bat` pede a senha nova (mascarada, com confirmação) e atualiza `UNIMED_SENHA` nos dois `.env`, criando a linha se não existir
+- Escreve UTF-8 **sem BOM**: com BOM o `dotenv` não reconhece a primeira variável do arquivo
+- Se nenhum `.env` existe, avisa que o PC não foi configurado e manda rodar o `instalar.bat`
+- Lembra na tela que é preciso reiniciar o servidor, que é o passo mais esquecido
+- Testado no Windows PowerShell 5.1, que é o que o `.bat` invoca
+
 ### Setup: instalador passa a criar o `.env` pedindo as credenciais
 **Arquivos:** `instalar.bat`, `LEIA-ME.txt`, `CLAUDE.md`
 - Colaborador novo não conseguia rodar o robô sem receber uma cópia manual do `.env`

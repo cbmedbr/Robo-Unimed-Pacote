@@ -30,13 +30,18 @@ CREDENCIAIS:
   gerenciador de senhas — nao mande por e-mail, WhatsApp ou dentro de
   documentos de procedimento.
 
-  Para TROCAR a senha da Unimed depois de instalado:
-    1. Trocar a senha no portal da Unimed
-    2. Editar a linha UNIMED_SENHA em servidor-local\.env
-       e em unimed-mvp-final\.env
-    3. Reiniciar o servidor (fechar e rodar iniciar.bat de novo) — a
-       config e lida so no boot, entao sem reiniciar ele continua
-       tentando com a senha antiga
+TROCAR A SENHA DA UNIMED (em cada PC que roda o robo):
+  1. Trocar a senha no portal da Unimed (so uma vez, nao em cada PC)
+  2. Em cada PC: executar trocar-senha.bat e digitar a senha nova
+     (a senha nao aparece na tela; ele pede duas vezes pra conferir)
+  3. Fechar a janela preta do robo e abrir o iniciar.bat de novo
+
+  O passo 3 e obrigatorio: a senha e lida so quando o servidor inicia.
+  Sem reiniciar, o robo continua tentando com a senha antiga e da erro
+  de login.
+
+  Se o PC foi instalado por copia da pasta (sem git), copie tambem os
+  arquivos trocar-senha.bat e trocar-senha.ps1 para a pasta do robo.
 
 USO DIARIO:
   1. Execute iniciar.bat (ou: cd servidor-local && npm run dev)
