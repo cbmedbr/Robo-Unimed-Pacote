@@ -17,9 +17,26 @@ REQUISITOS DO PC:
 
 INSTALACAO (1x):
   1. Copie esta pasta inteira para C:\Robo-Unimed\ no PC destino
+     (ou: git clone https://github.com/cbmedbr/Robo-Unimed-Pacote)
   2. Execute instalar.bat como administrador
-  3. Copie o arquivo .env do PC atual para servidor-local\.env
-     (contem senhas do Supabase e Unimed — NAO compartilhe)
+  3. O instalador vai pedir a senha do portal Unimed e a service role key
+     do Supabase, e montar o servidor-local\.env sozinho.
+
+CREDENCIAIS:
+  As senhas NAO ficam no GitHub — o repositorio e publico. Cada PC tem o
+  seu proprio .env, que o .gitignore mantem fora do controle de versao.
+
+  Para receber as credenciais, peca ao responsavel pelo robo. Use um
+  gerenciador de senhas — nao mande por e-mail, WhatsApp ou dentro de
+  documentos de procedimento.
+
+  Para TROCAR a senha da Unimed depois de instalado:
+    1. Trocar a senha no portal da Unimed
+    2. Editar a linha UNIMED_SENHA em servidor-local\.env
+       e em unimed-mvp-final\.env
+    3. Reiniciar o servidor (fechar e rodar iniciar.bat de novo) — a
+       config e lida so no boot, entao sem reiniciar ele continua
+       tentando com a senha antiga
 
 USO DIARIO:
   1. Execute iniciar.bat (ou: cd servidor-local && npm run dev)

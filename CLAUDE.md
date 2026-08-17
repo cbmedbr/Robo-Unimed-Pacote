@@ -30,3 +30,7 @@
 
 Ficam em `servidor-local/.env` e `unimed-mvp-final/.env` (`UNIMED_USUARIO`, `UNIMED_SENHA`), fora do
 controle de versão. Nunca escreva senhas em arquivos versionados, documentação ou mensagens de commit.
+
+**Este repositório é público.** Qualquer segredo commitado fica exposto na internet e permanece no
+histórico do git mesmo depois de removido. O `.env` de cada máquina é criado pelo `instalar.bat`, que
+pede as credenciais na hora — a senha nunca trafega pelo repositório.

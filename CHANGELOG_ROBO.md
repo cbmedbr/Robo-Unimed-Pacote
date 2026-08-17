@@ -4,6 +4,19 @@
 
 ---
 
+## 17/08/2026
+
+### Setup: instalador passa a criar o `.env` pedindo as credenciais
+**Arquivos:** `instalar.bat`, `LEIA-ME.txt`, `CLAUDE.md`
+- Colaborador novo não conseguia rodar o robô sem receber uma cópia manual do `.env`
+- `instalar.bat` agora pede usuário/senha da Unimed e a service role key do Supabase (entrada mascarada) e monta `servidor-local/.env` e `unimed-mvp-final/.env`
+- `ROBO_CAMINHO` é detectado a partir da pasta do script, em vez do caminho fixo da máquina do desenvolvedor anterior
+- Corrigido nome errado da variável na instrução do instalador: era `SUPABASE_SERVICE_KEY`, o servidor exige `SUPABASE_SERVICE_ROLE_KEY` (`servidor-local/src/config.ts`) — quem seguisse a instrução antiga tinha o servidor abortando no boot
+- Se o `.env` já existe, o instalador não sobrescreve
+- Documentado que o repositório é **público** e que credenciais nunca entram no controle de versão, com o procedimento de troca de senha (inclui reiniciar o servidor, já que a config é lida só no boot)
+
+---
+
 ## 14/08/2026
 
 ### Fix: guia de paciente intercâmbio não executava por campo obrigatório em branco
