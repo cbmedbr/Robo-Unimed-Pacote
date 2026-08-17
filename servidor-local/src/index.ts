@@ -14,7 +14,11 @@
 
 import express from "express";
 import cors from "cors";
+import { verificarVersaoSenha } from "./senha-versao.js";
 import { config } from "./config.js";
+
+// Antes de qualquer coisa: não subir com a senha do portal desatualizada.
+verificarVersaoSenha();
 import { supabase } from "./supabase.js";
 import { executarJob } from "./executor.js";
 import { executarSessaoJob, type DadosExecucaoSessao } from "./executor-sessao.js";

@@ -8,6 +8,8 @@ CONTEUDO:
   unimed-mvp-final/   - Robo Playwright (Chrome automatizado)
   instalar.bat        - Script de instalacao (rodar 1x no PC novo)
   iniciar.bat         - Script para iniciar o servidor (rodar todo dia)
+  trocar-senha.bat    - Troca a senha do portal Unimed neste PC
+  SENHA_VERSAO.txt    - Controle de qual senha esta valendo (nao editar)
 
 REQUISITOS DO PC:
   - Node.js v18+ instalado (https://nodejs.org)
@@ -30,18 +32,24 @@ CREDENCIAIS:
   gerenciador de senhas — nao mande por e-mail, WhatsApp ou dentro de
   documentos de procedimento.
 
-TROCAR A SENHA DA UNIMED (em cada PC que roda o robo):
-  1. Trocar a senha no portal da Unimed (so uma vez, nao em cada PC)
-  2. Em cada PC: executar trocar-senha.bat e digitar a senha nova
-     (a senha nao aparece na tela; ele pede duas vezes pra conferir)
-  3. Fechar a janela preta do robo e abrir o iniciar.bat de novo
+QUANDO A SENHA DA UNIMED MUDA:
+  Voce nao precisa avisar ninguem nem passar em cada PC. Na proxima vez
+  que o funcionario abrir o iniciar.bat, o proprio robo vai parar e pedir
+  a senha nova antes de iniciar. Ele pede uma unica vez por PC.
 
-  O passo 3 e obrigatorio: a senha e lida so quando o servidor inicia.
-  Sem reiniciar, o robo continua tentando com a senha antiga e da erro
-  de login.
+  Se o funcionario nao tiver a senha na hora, e so fechar a janela e
+  abrir de novo depois - o robo nao inicia com a senha velha, pra nao
+  falhar no meio de um atendimento.
 
-  Se o PC foi instalado por copia da pasta (sem git), copie tambem os
-  arquivos trocar-senha.bat e trocar-senha.ps1 para a pasta do robo.
+  PARA O RESPONSAVEL, ao trocar a senha:
+    1. Trocar a senha no portal da Unimed
+    2. Editar SENHA_VERSAO.txt com a data de hoje (ex: 2026-09-01)
+    3. Commitar e dar push
+    4. Passar a senha nova para a equipe por gerenciador de senhas
+
+  E o passo 2 que dispara o pedido nos PCs. Sem ele, ninguem e avisado.
+
+  Para trocar a senha em um PC sem esperar: rodar trocar-senha.bat.
 
 USO DIARIO:
   1. Execute iniciar.bat (ou: cd servidor-local && npm run dev)

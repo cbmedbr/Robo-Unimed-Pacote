@@ -6,6 +6,15 @@
 
 ## 17/08/2026
 
+### Setup: robô pede a senha nova sozinho quando ela é trocada
+**Arquivos:** `SENHA_VERSAO.txt` (novo), `iniciar-servidor.bat` (novo), `servidor-local/src/senha-versao.ts` (novo), `iniciar.bat`, `trocar-senha.ps1`, `servidor-local/src/index.ts`, `LEIA-ME.txt`, `.gitignore`
+- Trocar a senha exigia avisar cada funcionário e passar PC por PC
+- `SENHA_VERSAO.txt` é versionado e muda a cada troca; `.senha-versao` fica só no PC (gitignored) e guarda a versão já aplicada ali. Se diferem, o robô pede a senha antes de iniciar — uma vez por PC
+- `trocar-senha.ps1` grava o marcador ao concluir, então o pedido não se repete
+- **`iniciar.bat` foi reduzido ao mínimo** e delega para `iniciar-servidor.bat`: o `cmd.exe` lê o `.bat` linha a linha enquanto executa, então o `git pull` reescrevendo o próprio arquivo em execução fazia o resto virar lixo. O arquivo chamado só é aberto depois do pull terminar
+- Guarda equivalente no servidor (`verificarVersaoSenha()` em `index.ts`): cobre a primeira execução após o pull, quando o `.bat` antigo ainda estava rodando. Sem ela o servidor subiria com a senha velha e só falharia no login, no meio de um atendimento
+- Nenhuma senha entra no repositório — `SENHA_VERSAO.txt` guarda só uma data
+
 ### Setup: script para trocar a senha da Unimed nos PCs da equipe
 **Arquivos:** `trocar-senha.bat` (novo), `trocar-senha.ps1` (novo), `LEIA-ME.txt`
 - Trocar a senha exigia abrir os dois `.env` no Bloco de Notas em cada PC — inviável para a recepção

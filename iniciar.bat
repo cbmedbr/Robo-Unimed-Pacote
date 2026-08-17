@@ -1,8 +1,13 @@
 @echo off
+rem Este arquivo e proposital e permanentemente MINIMO.
+rem
+rem O cmd.exe le o .bat linha a linha enquanto executa, guardando a posicao
+rem em bytes. Se o "git pull" abaixo reescrever ESTE arquivo, o cmd continua
+rem lendo o arquivo novo a partir da posicao antiga e executa lixo.
+rem
+rem Por isso toda a logica fica em iniciar-servidor.bat, que so e aberto
+rem depois que o pull terminou. Evite adicionar linhas aqui.
+cd /d "%~dp0"
 echo Atualizando codigo do robo...
-cd /d "%~dp0unimed-mvp-final"
 git pull origin main
-cd /d "%~dp0servidor-local"
-git pull origin main
-echo Iniciando servidor do Robo Unimed...
-npm run dev
+call "%~dp0iniciar-servidor.bat"

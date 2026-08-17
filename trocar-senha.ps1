@@ -13,6 +13,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 if (-not $Raiz) { $Raiz = Split-Path -Parent $MyInvocation.MyCommand.Path }
+$Raiz = (Resolve-Path -LiteralPath $Raiz).Path
 
 function Atualizar-Env {
     param([string]$Caminho, [string]$NovaSenha)
@@ -90,6 +91,18 @@ foreach ($alvo in $alvos) {
         "atualizado" { Write-Host "  OK       $nome" -ForegroundColor Green }
         "adicionado" { Write-Host "  OK       $nome (linha UNIMED_SENHA criada)" -ForegroundColor Green }
         "ausente"    { Write-Host "  IGNORADO $nome (arquivo nao existe neste PC)" -ForegroundColor DarkGray }
+    }
+}
+
+# Marca neste PC qual versao de senha ja foi aplicada, para o iniciar.bat
+# nao pedir de novo toda vez. O arquivo fica fora do controle de versao.
+$arquivoVersao = Join-Path $Raiz "SENHA_VERSAO.txt"
+if (Test-Path $arquivoVersao) {
+    $versao = (Get-Content -LiteralPath $arquivoVersao -TotalCount 1)
+    if ($null -ne $versao) { $versao = $versao.Trim() }
+    if ($versao) {
+        $utf8SemBom = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::WriteAllText((Join-Path $Raiz ".senha-versao"), $versao, $utf8SemBom)
     }
 }
 

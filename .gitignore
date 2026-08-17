@@ -1,5 +1,6 @@
 node_modules/
 .env
+.senha-versao
 screenshots/
 dump-*.html
 dump-*.png
