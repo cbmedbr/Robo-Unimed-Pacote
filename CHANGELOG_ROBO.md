@@ -6,6 +6,18 @@
 
 ## 21/08/2026
 
+### Fix: scripts .bat com quebra de linha LF corrompiam a própria execução
+**Arquivos:** `.gitattributes` (novo), `iniciar.bat`, `iniciar-servidor.bat`, `instalar.bat`, `trocar-senha.bat`, `trocar-senha.ps1`
+- Os scripts foram criados com quebras **LF**. O `cmd.exe` navega por posição em bytes ao processar `GOTO` e assume CRLF, então passava a comer o primeiro caractere de cada linha — `setlocal` virava `tlocal`, `rem` virava `em`
+- O sintoma parece corrupção do arquivo e não tem relação aparente com a causa
+- Todos convertidos para CRLF e `.gitattributes` força `eol=crlf` em `.bat`, `.cmd` e `.ps1` no checkout
+
+### Setup: pré-checagem não pegava node_modules oca, e git quebrado pelo OneDrive
+**Arquivos:** `iniciar-servidor.bat`
+- A checagem olhava se a **pasta** `node_modules` existia. Ao copiar de dentro do OneDrive, a pasta vem mas os arquivos chegam vazios (eram atalhos de nuvem) — passava batido e quebrava depois, com `Cannot find module '...tsx/dist/cli.mjs'`
+- Agora verifica o **arquivo** que é realmente carregado: `tsx/dist/cli.mjs` e `playwright/index.js`, e a mensagem manda apagar `node_modules` antes de reinstalar
+- O OneDrive também deixa `desktop.ini` dentro de `.git`, o que quebra o `git pull` com `fatal: bad object refs/desktop.ini` — a máquina para de receber atualizações em silêncio. O `iniciar-servidor.bat` agora limpa esses arquivos sozinho antes de subir
+
 ### Setup: janela do iniciar fechando sozinha sem mostrar o erro
 **Arquivos:** `iniciar-servidor.bat`, `LEIA-ME.txt`
 - Se o servidor falhava na largada, o `.bat` chegava ao fim e a janela fechava antes de dar tempo de ler qualquer coisa — a funcionária só via um piscar

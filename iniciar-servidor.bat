@@ -17,19 +17,35 @@ if errorlevel 1 (
     goto :erro
 )
 
-if not exist "%RAIZ%servidor-local\node_modules" (
+rem Checar o ARQUIVO que o servidor realmente carrega, nao so a pasta:
+rem uma pasta node_modules pode existir e estar oca (foi o que aconteceu ao
+rem copiar de dentro do OneDrive, que deixa arquivos como atalho de nuvem).
+if not exist "%RAIZ%servidor-local\node_modules\tsx\dist\cli.mjs" (
     echo.
-    echo ERRO: as dependencias do SERVIDOR nao estao instaladas.
-    echo Feche esta janela e rode o instalar.bat.
+    echo ERRO: as dependencias do SERVIDOR estao faltando ou incompletas.
+    echo.
+    echo Feche esta janela e rode, nesta pasta:
+    echo   Remove-Item servidor-local\node_modules -Recurse -Force
+    echo   instalar.bat
     goto :erro
 )
 
-if not exist "%RAIZ%unimed-mvp-final\node_modules\playwright" (
+if not exist "%RAIZ%unimed-mvp-final\node_modules\playwright\index.js" (
     echo.
-    echo ERRO: as dependencias do ROBO nao estao instaladas.
+    echo ERRO: as dependencias do ROBO estao faltando ou incompletas.
     echo O servidor ate abre, mas o robo falha na hora de executar a guia.
-    echo Feche esta janela e rode o instalar.bat.
+    echo.
+    echo Feche esta janela e rode, nesta pasta:
+    echo   Remove-Item unimed-mvp-final\node_modules -Recurse -Force
+    echo   instalar.bat
     goto :erro
+)
+
+rem Restos de OneDrive dentro do .git quebram o git pull com
+rem "fatal: bad object refs/desktop.ini" — a maquina para de receber
+rem atualizacoes em silencio. Limpar e barato, entao limpa sozinho.
+if exist "%RAIZ%.git" (
+    del /s /q "%RAIZ%.git\desktop.ini" >nul 2>&1
 )
 
 if not exist "%RAIZ%servidor-local\.env" (

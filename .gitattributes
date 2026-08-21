@@ -1,0 +1,8 @@
+# Scripts do Windows PRECISAM de CRLF.
+#
+# Com quebras LF, o cmd.exe erra a navegacao por bytes ao processar GOTO e
+# passa a comer o primeiro caractere de cada linha ('setlocal' vira 'tlocal').
+# O sintoma parece corrupcao do arquivo e nao tem relacao aparente com a causa.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
