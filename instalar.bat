@@ -101,6 +101,13 @@ if not exist "%~dp0unimed-mvp-final\.env" (
     ) > "%~dp0unimed-mvp-final\.env"
 )
 
+rem A senha acabou de ser digitada, entao marca a versao atual como aplicada.
+rem Sem isto o iniciar.bat acharia que a senha esta desatualizada e pediria
+rem tudo de novo logo em seguida.
+if exist "%~dp0SENHA_VERSAO.txt" (
+    copy /y "%~dp0SENHA_VERSAO.txt" "%~dp0.senha-versao" >nul
+)
+
 echo.
 echo Credenciais gravadas em servidor-local\.env e unimed-mvp-final\.env
 echo Esses arquivos estao no .gitignore e nunca vao para o GitHub.
