@@ -2,14 +2,24 @@
 //
 // Verifica o status atual de uma guia já gerada no portal Unimed.
 // Usado pelo cron do servidor local pra acompanhar guias que ficaram
-// "Em estudo" / "Em análise" até virarem autorizadas (ou negadas).
+// "Em estudo" até virarem autorizadas (ou negadas).
 //
-// Fluxo:
-//   1. Login no portal (reusa fazerLogin)
-//   2. Navega pra /exames/emaberto/lista.do (ou .../finalizadas se não achar)
-//   3. Filtra por número da guia (se houver filtro); senão, varre a lista
-//   4. Lê a coluna Situação e captura senha de autorização atualizada
-//   5. Retorna estado atual
+// TELA USADA: Utilitários > Consulta Solicitações
+//   /cmagnet/utilitarios/consulta_guias/index.do
+//
+// É a ÚNICA tela que enxerga os três estados. Confirmado em 21/08/2026 contra
+// guias reais de cada tipo:
+//   50142824072 → "Executado"   (autorizada e já executada)
+//   50143762989 → "Em estudo"   (ainda em análise)
+//   50143768031 → "Negado"      (recusada)
+//
+// "Exames em aberto" e "Exames finalizados" NÃO servem: só listam guias já
+// autorizadas e não têm coluna de situação.
+//
+// NAVEGAÇÃO: nunca montar a URL na mão. O portal exige o `dynaHash` da sessão
+// e, sem ele, responde a tela de login com HTTP 200 — sem lançar erro, o que
+// fazia a versão anterior achar que tinha navegado e ler uma página vazia.
+// O href do link do menu já vem com o hash correto; é dele que partimos.
 //
 // IMPORTANTE: assume Chrome HEADLESS por padrão (rodar invisível).
 
@@ -35,53 +45,19 @@ export interface ResultadoVerificacao {
 }
 
 // ============================================================================
-// Verifica UMA guia
+// Verifica UMA guia (mantido para uso avulso)
 // ============================================================================
 
 export async function verificarStatusGuia(
   numeroGuia: string,
   config: Config
 ): Promise<ResultadoVerificacao> {
-  const inicio = Date.now();
-  let browser: Browser | null = null;
-  let context: BrowserContext | null = null;
-
-  try {
-    browser = await chromium.launch({
-      headless: config.headless,
-      args: ["--no-sandbox", "--disable-dev-shm-usage"],
-    });
-    context = await browser.newContext();
-    const page = await context.newPage();
-
-    // 1. Login
-    await fazerLogin(page, config);
-
-    // 2. Verifica
-    return await verificarNaPagina(page, numeroGuia, config, inicio);
-  } catch (err) {
-    const mensagem = (err as Error).message;
-    logger.error({ numeroGuia, mensagem }, "erro ao verificar status");
-    return {
-      numero_guia: numeroGuia,
-      situacao: "ERRO",
-      senha_autorizacao: null,
-      motivo: `Erro técnico: ${mensagem}`,
-      verificado_em: new Date().toISOString(),
-      duracao_ms: Date.now() - inicio,
-    };
-  } finally {
-    try {
-      await context?.close();
-      await browser?.close();
-    } catch {
-      // ignora
-    }
-  }
+  const [r] = await verificarStatusEmLote([numeroGuia], config);
+  return r;
 }
 
 // ============================================================================
-// Verifica VÁRIAS guias na mesma sessão (mais eficiente: 1 login só)
+// Verifica VÁRIAS guias na mesma sessão (1 login só)
 // ============================================================================
 
 export async function verificarStatusEmLote(
@@ -107,8 +83,7 @@ export async function verificarStatusEmLote(
     for (const guia of numerosGuia) {
       const inicio = Date.now();
       try {
-        const r = await verificarNaPagina(page, guia, config, inicio);
-        resultados.push(r);
+        resultados.push(await verificarNaPagina(page, guia, config, inicio));
       } catch (err) {
         resultados.push({
           numero_guia: guia,
@@ -119,6 +94,20 @@ export async function verificarStatusEmLote(
           duracao_ms: Date.now() - inicio,
         });
       }
+    }
+  } catch (err) {
+    // Falhou antes ou durante o login: marca o que sobrou como ERRO em vez de
+    // devolver lista curta (o chamador casa resultado por número de guia).
+    const jaFeitas = new Set(resultados.map((r) => r.numero_guia));
+    for (const guia of numerosGuia.filter((g) => !jaFeitas.has(g))) {
+      resultados.push({
+        numero_guia: guia,
+        situacao: "ERRO",
+        senha_autorizacao: null,
+        motivo: `Erro de sessão: ${(err as Error).message}`,
+        verificado_em: new Date().toISOString(),
+        duracao_ms: 0,
+      });
     }
   } finally {
     try {
@@ -133,7 +122,7 @@ export async function verificarStatusEmLote(
 }
 
 // ============================================================================
-// Função core: navega e lê o status
+// Core
 // ============================================================================
 
 async function verificarNaPagina(
@@ -144,40 +133,23 @@ async function verificarNaPagina(
 ): Promise<ResultadoVerificacao> {
   logger.info({ numeroGuia }, "verificando status da guia");
 
-  // 1. Navega pra "Exames em aberto"
-  // O dynaHash da URL muda a cada sessão, então vou clicar no menu por texto.
-  await navegarParaExamesEmAberto(page, config);
+  await abrirConsultaSolicitacoes(page, config);
+  const linha = await filtrarELerLinha(page, numeroGuia, config);
 
-  // 2. Procura a guia. Estratégias em ordem:
-  //    A. Tem filtro/busca por número → usa
-  //    B. Varre a tabela atual (e próximas páginas se houver)
-  //    C. Se não achar em "em aberto", tenta "finalizadas" (já autorizadas)
-
-  let situacaoTexto = await tentarAcharGuiaNaPagina(page, numeroGuia, config);
-
-  if (!situacaoTexto) {
-    // Tenta "finalizadas" — guia pode já ter sido autorizada
-    logger.info({ numeroGuia }, "não achei em 'em aberto', tentando 'finalizadas'");
-    await navegarParaExamesFinalizados(page, config);
-    situacaoTexto = await tentarAcharGuiaNaPagina(page, numeroGuia, config);
-  }
-
-  if (!situacaoTexto) {
+  if (!linha) {
     return {
       numero_guia: numeroGuia,
       situacao: "NAO_ENCONTRADA",
       senha_autorizacao: null,
-      motivo: "Guia não encontrada nas listas de em aberto ou finalizadas",
+      motivo: "Guia não retornou resultado em Consulta Solicitações",
       verificado_em: new Date().toISOString(),
       duracao_ms: Date.now() - inicio,
     };
   }
 
-  // 3. Interpreta o texto da situação
-  const { situacao, senha_autorizacao, motivo } = interpretarSituacao(
-    situacaoTexto.textoSituacao,
-    situacaoTexto.htmlLinha
-  );
+  const { situacao, senha_autorizacao, motivo } = interpretarLinha(linha, numeroGuia);
+
+  logger.info({ numeroGuia, situacao, textoPortal: linha[0] }, "status lido");
 
   return {
     numero_guia: numeroGuia,
@@ -189,243 +161,119 @@ async function verificarNaPagina(
   };
 }
 
-// ============================================================================
-// Navegação
-// ============================================================================
+/**
+ * Abre Utilitários > Consulta Solicitações partindo do href do menu, que já
+ * carrega o `dynaHash` da sessão. Montar a URL na mão cai na tela de login.
+ */
+async function abrirConsultaSolicitacoes(page: Page, config: Config): Promise<void> {
+  const href = await page
+    .locator('a[href*="consulta_guias"]')
+    .first()
+    .getAttribute("href", { timeout: config.clickTimeout })
+    .catch(() => null);
 
-async function navegarParaExamesEmAberto(page: Page, config: Config): Promise<void> {
-  // O menu lateral tem link tipo: loadFirstMenu('3', '/cmagnet/./exames/emaberto/lista.do?...')
-  // O CD_MENU=3 é "Exames em aberto" (confirmado no dump da tela final).
-  // Estratégia: clicar no link com texto "Em aberto" dentro da seção "SP/SADT".
-
-  // Estratégia 1: link direto pela URL parcial (mais robusto que clicar em texto)
-  try {
-    const baseUrl = new URL(config.unimedUrl).origin;
-    const url = `${baseUrl}/cmagnet/exames/emaberto/lista.do?z=0&CD_MENU=3`;
-    await page.goto(url, {
-      waitUntil: "networkidle",
-      timeout: config.navegacaoTimeout,
-    });
-    logger.debug({ url }, "navegou direto pra exames em aberto");
-    return;
-  } catch (err) {
-    logger.warn({ erro: (err as Error).message }, "navegação direta falhou, tentando via menu");
+  if (!href) {
+    throw new Error("Link de 'Consulta Solicitações' não encontrado no menu");
   }
 
-  // Estratégia 2: clicar no menu lateral
-  try {
-    // Tenta link/botão com texto "Em aberto" próximo de "SP/SADT" ou "Exame"
-    const linkExames = page
-      .locator("a")
-      .filter({ hasText: /Em aberto/i })
-      .first();
-    await linkExames.click({ timeout: config.navegacaoTimeout });
-    await page.waitForLoadState("networkidle", { timeout: config.navegacaoTimeout });
-  } catch (err) {
-    throw new Error(`Não consegui navegar pra "Exames em aberto": ${(err as Error).message}`);
+  const destino = new URL(href.replace("/./", "/"), page.url()).toString();
+  await page.goto(destino, { waitUntil: "networkidle", timeout: config.navegacaoTimeout });
+
+  if (page.url().includes("Login.do")) {
+    throw new Error("Portal redirecionou para login ao abrir Consulta Solicitações");
   }
 }
 
-async function navegarParaExamesFinalizados(page: Page, config: Config): Promise<void> {
-  try {
-    const baseUrl = new URL(config.unimedUrl).origin;
-    const url = `${baseUrl}/cmagnet/exames/sadt/finalizadas.do?z=0&CD_MENU=21`;
-    await page.goto(url, {
-      waitUntil: "networkidle",
-      timeout: config.navegacaoTimeout,
-    });
-    return;
-  } catch (err) {
-    logger.warn({ erro: (err as Error).message }, "navegação direta finalizadas falhou");
-  }
-
-  try {
-    const linkFin = page
-      .locator("a")
-      .filter({ hasText: /Finalizadas/i })
-      .first();
-    await linkFin.click({ timeout: config.navegacaoTimeout });
-    await page.waitForLoadState("networkidle", { timeout: config.navegacaoTimeout });
-  } catch {
-    // Se não achar, segue — a função chamadora vai lidar
-  }
-}
-
-// ============================================================================
-// Busca pela guia na página
-// ============================================================================
-
-interface AchadoGuia {
-  textoSituacao: string;
-  htmlLinha: string;
-}
-
-async function tentarAcharGuiaNaPagina(
+/**
+ * Filtra pelo número da guia e devolve as células da linha encontrada.
+ *
+ * O campo de filtro se chama `s_nr_guia`. Não usar `html.includes(numero)` para
+ * decidir se achou: o número volta ecoado no próprio campo do formulário, então
+ * isso dá verdadeiro mesmo com zero resultados.
+ */
+async function filtrarELerLinha(
   page: Page,
   numeroGuia: string,
   config: Config
-): Promise<AchadoGuia | null> {
-  // Estratégia A: usar campo de filtro por número de guia, se houver
-  const filtroUsado = await tentarUsarFiltroNumeroGuia(page, numeroGuia, config);
-  if (filtroUsado) {
-    // Filtrou — vê o que sobrou na tabela
-    await page.waitForLoadState("networkidle", { timeout: config.navegacaoTimeout }).catch(() => {});
-  }
-
-  // Estratégia B: varrer a tabela paginando até achar ou esgotar
-  const maxPaginas = filtroUsado ? 1 : 20; // se filtrou, só 1 página esperada
-  for (let i = 0; i < maxPaginas; i++) {
-    const achado = await buscarGuiaNaTabela(page, numeroGuia);
-    if (achado) return achado;
-
-    // Tenta paginar
-    const temProxima = await irParaProximaPagina(page, config);
-    if (!temProxima) break;
-  }
-
-  return null;
-}
-
-async function tentarUsarFiltroNumeroGuia(
-  page: Page,
-  numeroGuia: string,
-  config: Config
-): Promise<boolean> {
-  // O portal Unimed costuma ter campo de filtro "Nº Guia" que aparece ao clicar no botão "Filtrar".
-  // Não tenho garantia 100% do seletor — tento alguns.
-  const seletoresPossiveis = [
-    'input[name="nr_guia"]',
-    'input[name="nrGuia"]',
-    'input[name="NR_GUIA"]',
-    'input[id="nr_guia"]',
-    'input[id="NR_GUIA"]',
-  ];
-
-  // Antes, talvez precisar clicar num botão "Filtrar" pra expandir o painel
-  try {
-    const btnFiltrar = page.locator("button, input[type=button], a").filter({
-      hasText: /^Filtrar$/i,
-    }).first();
-    if (await btnFiltrar.isVisible({ timeout: 1500 })) {
-      await btnFiltrar.click();
-      await page.waitForTimeout(500);
-    }
-  } catch {
-    // Painel pode já estar aberto, ou não existir
-  }
-
-  for (const sel of seletoresPossiveis) {
+): Promise<string[] | null> {
+  for (const sel of ['input[name="s_dt_ini"]', 'input[name="s_dt_fim"]']) {
     try {
-      const campo = page.locator(sel).first();
-      if (await campo.isVisible({ timeout: 1500 })) {
-        await campo.fill(numeroGuia);
-        // Tenta clicar em botão de buscar/filtrar
-        const btnBuscar = page
-          .locator("button, input[type=button], input[type=submit]")
-          .filter({ hasText: /Filtrar|Buscar|Pesquisar/i })
-          .first();
-        if (await btnBuscar.isVisible({ timeout: 1500 })) {
-          await btnBuscar.click();
-        } else {
-          // Sem botão visível → Enter no próprio campo
-          await campo.press("Enter");
-        }
-        logger.debug({ seletor: sel }, "filtro por número de guia aplicado");
-        return true;
-      }
+      const el = page.locator(sel).first();
+      if (await el.isVisible({ timeout: 800 })) await el.fill("");
     } catch {
-      // Tenta próximo seletor
+      // campo pode não existir nesta tela
     }
   }
 
-  return false;
-}
+  const campo = page.locator('input[name="s_nr_guia"]').first();
+  if (!(await campo.isVisible({ timeout: config.clickTimeout }).catch(() => false))) {
+    throw new Error("Campo de filtro 's_nr_guia' não encontrado na tela");
+  }
+  await campo.fill(numeroGuia);
 
-async function buscarGuiaNaTabela(
-  page: Page,
-  numeroGuia: string
-): Promise<AchadoGuia | null> {
-  // Procura na tabela uma linha que contenha o número da guia.
-  // No HTML do portal a tabela tem:
-  //   <td><a id="linkNrGuia">NUMERO</a></td>
-  //   <td>(Situação com <span>texto</span>)</td>
-  //   ...
+  await page
+    .locator('input[name="Button_FIltro"], input[value="Filtrar"], button:has-text("Filtrar")')
+    .first()
+    .click({ timeout: config.clickTimeout });
+  await page.waitForLoadState("networkidle", { timeout: config.navegacaoTimeout }).catch(() => {});
 
-  const html = await page.content();
+  if (page.url().includes("Login.do")) {
+    throw new Error("Sessão expirou ao filtrar");
+  }
 
-  // Regex que captura a linha completa contendo o número da guia.
-  // tr...td com numero...td...situação até fechar </tr>
-  const re = new RegExp(
-    `<tr[^>]*>(?:[\\s\\S](?!</tr>))*?${numeroGuia}(?:[\\s\\S](?!</tr>))*?</tr>`,
-    "i"
+  // Linha de dados = a que tem o número da guia em uma célula própria
+  const linhas = await page.locator("tr").evaluateAll((trs, guia) =>
+    trs
+      .map((tr) => Array.from(tr.querySelectorAll("td")).map((td) => (td.textContent || "").replace(/\s+/g, " ").trim()))
+      .filter((celulas) => celulas.some((c) => c === guia)),
+    numeroGuia
   );
-  const match = html.match(re);
-  if (!match) return null;
 
-  const htmlLinha = match[0];
-
-  // Dentro da linha, procura o <span> da coluna situação.
-  // Coluna 2 (depois do número da guia) tem o span de texto.
-  const matchSpan = htmlLinha.match(/<span[^>]*>\s*([^<]+?)\s*<\/span>/i);
-  const textoSituacao = matchSpan ? matchSpan[1].trim() : "";
-
-  return { textoSituacao, htmlLinha };
-}
-
-async function irParaProximaPagina(page: Page, config: Config): Promise<boolean> {
-  // Procura link/botão "Próxima"
-  try {
-    const linkProxima = page
-      .locator("a, button")
-      .filter({ hasText: /^Pr[óo]xima$/i })
-      .first();
-    if (await linkProxima.isVisible({ timeout: 1500 })) {
-      await linkProxima.click();
-      await page.waitForLoadState("networkidle", { timeout: config.navegacaoTimeout });
-      await page.waitForTimeout(300);
-      return true;
-    }
-  } catch {
-    // Sem próxima página
-  }
-  return false;
+  return linhas.length > 0 ? linhas[0] : null;
 }
 
 // ============================================================================
-// Interpretação do texto
+// Interpretação
 // ============================================================================
 
-function interpretarSituacao(
-  textoSituacao: string,
-  htmlLinha: string
+/**
+ * Layout confirmado da linha em Consulta Solicitações:
+ *   [0] Situação   [1] Data de entrada   [2] Nº Guia   [3] Beneficiário
+ *   [4] Origem     [5] Senha             [6] Contratado  [7] Profissional
+ */
+export function interpretarLinha(
+  celulas: string[],
+  numeroGuia: string
 ): { situacao: SituacaoVerificada; senha_autorizacao: string | null; motivo: string | null } {
-  const txt = textoSituacao.toLowerCase();
+  const texto = (celulas[0] || "").trim();
+  const t = texto.toLowerCase();
 
-  // Captura senha de autorização da linha, se aparecer
-  // Padrão: célula com 6-8 dígitos. Geralmente coluna "Senha".
-  const matchSenha = htmlLinha.match(/<td[^>]*>\s*(\d{6,8})\s*&nbsp;\s*<\/td>/);
-  const senha = matchSenha ? matchSenha[1] : null;
+  // Senha: célula de 6 a 9 dígitos que não seja o próprio número da guia.
+  // "-" significa sem senha (guia não autorizada).
+  const senha =
+    celulas.find((c) => /^\d{6,9}$/.test(c) && c !== numeroGuia) ?? null;
 
-  if (/em execu[çc][ãa]o|autorizad[ao]|liberad[ao]/i.test(txt)) {
+  if (/executad|autorizad|liberad|em execu[çc][ãa]o/i.test(t)) {
     return { situacao: "APROVADO", senha_autorizacao: senha, motivo: null };
   }
 
-  if (/em estudo|em an[áa]lise|aguardando/i.test(txt)) {
+  if (/em estudo|em an[áa]lise|aguardando|pendente/i.test(t)) {
     return { situacao: "EM_ANALISE", senha_autorizacao: senha, motivo: null };
   }
 
-  if (/negad[ao]|recusad[ao]|n[ãa]o autorizad[ao]|cancelad[ao]/i.test(txt)) {
-    return {
-      situacao: "NEGADA",
-      senha_autorizacao: null,
-      motivo: textoSituacao,
-    };
+  if (/negad|recusad|n[ãa]o autorizad|cancelad|indeferid/i.test(t)) {
+    return { situacao: "NEGADA", senha_autorizacao: null, motivo: texto };
   }
 
-  // Texto desconhecido — registra como em análise por segurança
+  // Situação desconhecida é ERRO, não "em análise".
+  //
+  // A versão anterior devolvia EM_ANALISE aqui "por segurança", e isso
+  // escondeu por 45 dias o fato de que a verificação estava lendo a tela
+  // errada: toda falha de leitura virava "continua em análise", que é
+  // exatamente o estado em que a guia já estava.
   return {
-    situacao: "EM_ANALISE",
+    situacao: "ERRO",
     senha_autorizacao: senha,
-    motivo: `Situação não interpretada: "${textoSituacao}"`,
+    motivo: `Situação não reconhecida no portal: "${texto}"`,
   };
 }

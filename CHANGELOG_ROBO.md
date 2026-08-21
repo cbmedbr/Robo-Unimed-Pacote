@@ -4,6 +4,53 @@
 
 ---
 
+## 21/08/2026
+
+### Fix: verificação de guias em análise nunca funcionou — 118 guias paradas
+**Arquivos:** `unimed-mvp-final/src/verificar_status.ts`, `servidor-local/src/verificador.ts`, `DOCUMENTACAO_ROBO.md`
+
+Investigação partiu de uma guia (Bruna Fontes, `50142824072`) autorizada no portal
+desde 29/07 e ainda marcada como "em análise" no CRM. Os dados mostraram que o
+problema era geral: **118 guias presas em `sucesso_em_analise`**, a mais antiga de
+07/07, e **nenhuma transição de status feita pelo verificador em toda a história do
+banco** — zero aprovações tardias, zero `NEGADA_PELA_UNIMED`.
+
+Cinco defeitos empilhados, todos confirmados contra o portal real:
+
+1. **Navegava por URL fixa**, sem o `dynaHash` da sessão. O portal responde a tela de
+   login com HTTP 200 — como `page.goto()` não lança erro, o `catch` que levaria à
+   estratégia correta (clicar no menu) nunca executava. Resultado: página sem tabela,
+   `NAO_ENCONTRADA` para tudo.
+2. **Lia as telas erradas.** "Exames em aberto" e "Exames finalizados" só listam guias
+   já autorizadas e não têm coluna de situação. A tela certa é
+   **Utilitários → Consulta Solicitações**, a única que mostra os três estados.
+3. **Filtro com nome inexistente** (`nr_guia`, `nrGuia`, `NR_GUIA`). O campo real é
+   `s_nr_guia`.
+4. **`html.includes(numeroGuia)` como prova de que achou** — sempre verdadeiro, porque
+   o número volta ecoado no campo do formulário.
+5. **Fallback silencioso para `EM_ANALISE`** em texto não reconhecido, incluindo
+   "Executado". Como a guia já estava em análise, falha e "sem novidade" ficavam
+   indistinguíveis — foi o que escondeu tudo por 45 dias.
+
+Correção: navega pelo `href` do menu (que já traz o `dynaHash`), filtra por
+`s_nr_guia`, localiza a linha pela célula exata do número e lê a situação da célula 0.
+Texto desconhecido agora vira `ERRO` com o texto lido, nunca `EM_ANALISE`.
+
+No servidor: `EM_ANALISE` carimba `updated_at` (para saber quando foi checada pela
+última vez), e `NAO_ENCONTRADA`/`ERRO` gravam `erro_codigo` no job em vez de morrer no
+log. Prazo do cron passou de 15 para 45 dias (`VERIFICACAO_PRAZO_DIAS`) — havia guias
+ainda "Em estudo" na Unimed depois de 40 dias, e com 15 elas sumiam do radar.
+
+Validado contra guias reais de cada estado: `50142824072` Executado → APROVADO (senha
+8166862), `50143762989` Em estudo → EM_ANALISE, `50143768031` e `50143780192` Negado →
+NEGADA, e uma guia inexistente → NAO_ENCONTRADA.
+
+Efeito colateral corrigido: a senha de autorização era capturada por regex solta de
+6-8 dígitos e às vezes pegava a célula errada (a da Bruna estava gravada como
+`50142824`, os 8 primeiros dígitos do número da guia; a real é `8166862`).
+
+---
+
 ## 17/08/2026
 
 ### Setup: robô pede a senha nova sozinho quando ela é trocada

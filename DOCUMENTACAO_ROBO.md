@@ -271,23 +271,57 @@ O formulário de série tem 10 campos `dt_serie_1` a `dt_serie_10` na seção "D
 ### Agendamento
 - Primeira execução: 5 minutos após iniciar o servidor
 - Intervalo: a cada 4 horas
-- Endpoint manual: `POST /verificar-em-analise` (com `{ forcar: true }` para ignorar limite de 15 dias)
+- Prazo: guias em análise há até **45 dias** (`VERIFICACAO_PRAZO_DIAS` no `.env`)
+- Endpoint manual: `POST /verificar-em-analise` (com `{ forcar: true }` para ignorar o prazo)
+
+### Tela usada: Utilitários → Consulta Solicitações
+
+`/cmagnet/utilitarios/consulta_guias/index.do`
+
+É a **única** tela que mostra os três estados. "Exames em aberto" e "Exames
+finalizados" não servem: só listam guias já autorizadas e **não têm coluna de
+situação**.
+
+Layout da linha (confirmado em 21/08/2026 contra guias reais):
+
+| Índice | Coluna |
+|---|---|
+| 0 | **Situação** |
+| 1 | Data de entrada |
+| 2 | Nº Guia |
+| 3 | Beneficiário |
+| 4 | Origem |
+| 5 | Senha de autorização |
+| 6 | Contratado |
+| 7 | Profissional solicitante |
 
 ### Fluxo (`verificar_status.ts`)
 1. Login no portal
 2. Para cada número de guia:
-   - Navega para "Exames em aberto"
-   - Filtra pelo número da guia
-   - Lê situação na tabela (texto do `<span>` na linha)
-   - Se não encontrada → tenta "Exames finalizados"
-3. Interpreta situação:
-   - `"em execução|autorizado|liberado"` → `APROVADO`
-   - `"em estudo|em análise|aguardando"` → `EM_ANALISE`
-   - `"negado|recusado|não autorizado|cancelado"` → `NEGADA`
+   - Abre Consulta Solicitações pelo **`href` do link do menu** — nunca montando
+     a URL. O portal exige o `dynaHash` da sessão e, sem ele, devolve a tela de
+     login com **HTTP 200**, sem lançar erro
+   - Filtra pelo campo **`s_nr_guia`**
+   - Localiza a linha cuja célula é exatamente o número da guia
+3. Interpreta a célula 0:
+   - `"executado|autorizado|liberado|em execução"` → `APROVADO`
+   - `"em estudo|em análise|aguardando|pendente"` → `EM_ANALISE`
+   - `"negado|recusado|não autorizado|cancelado|indeferido"` → `NEGADA`
+   - qualquer outro texto → **`ERRO`** com o texto lido
 4. Atualiza Supabase:
-   - APROVADO → job `status="sucesso"`, guia `status="ativa"`
+   - APROVADO → job `status="sucesso"`, guia `status="ativa"`, grava a senha
    - NEGADA → job `status="falhou"`, guia `status="negada"`
-   - EM_ANALISE → sem alteração
+   - EM_ANALISE → carimba `updated_at` (registro de quando foi checada)
+   - NAO_ENCONTRADA / ERRO → grava `erro_codigo` no job
+
+### Armadilhas (aprendidas na marra)
+
+- **Nunca usar `html.includes(numeroGuia)` para saber se achou.** O número volta
+  ecoado no campo do formulário, então isso é sempre verdadeiro — inclusive com
+  zero resultados.
+- **Nunca devolver `EM_ANALISE` como fallback** de texto não reconhecido. A guia
+  já está nesse estado, então a falha fica indistinguível de "sem novidade". Foi
+  assim que a verificação passou 45 dias quebrada sem ninguém notar.
 
 ---
 

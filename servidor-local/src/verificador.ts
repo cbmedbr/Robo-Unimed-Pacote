@@ -14,7 +14,10 @@ import { supabase } from "./supabase.js";
 const PASTA_TEMP = path.join(os.tmpdir(), "unimed-verificacao");
 await fs.mkdir(PASTA_TEMP, { recursive: true });
 
-const PRAZO_AUTOMATICO_DIAS = 15;
+// Prazo do cron automático. Era 15 dias, mas os dados mostraram guias ainda
+// "Em estudo" na Unimed depois de 40+ dias — com 15 elas sumiam do radar sem
+// aviso. Ajustável por env se a operação precisar de outro corte.
+const PRAZO_AUTOMATICO_DIAS = parseInt(process.env.VERIFICACAO_PRAZO_DIAS ?? "45", 10);
 
 export interface ResultadoVerificacaoRobo {
   numero_guia: string;
@@ -228,14 +231,20 @@ async function atualizarComResultado(
         `[cron] ✕ Guia ${resultado.numero_guia} (${job.paciente_nome_snapshot}) → NEGADA. Motivo: ${resultado.motivo ?? "(sem motivo)"}`
       );
 
+      // O portal usa dois textos diferentes aqui: "Negado" (recusada pela
+      // auditoria) e "Cancelado" (guia cancelada). Não são a mesma coisa para
+      // a operação, então o código de erro preserva a diferença.
+      const foiCancelada = /cancelad/i.test(resultado.motivo ?? "");
+
       await supabase
         .from("unimed_aprovacao_jobs")
         .update({
           status: "falhou",
           situacao_unimed: null,
-          erro_codigo: "NEGADA_PELA_UNIMED",
-          erro_mensagem: `Guia foi negada após análise: ${resultado.motivo ?? "(sem motivo)"}`,
+          erro_codigo: foiCancelada ? "GUIA_CANCELADA_NO_PORTAL" : "NEGADA_PELA_UNIMED",
+          erro_mensagem: `Portal Unimed: "${resultado.motivo ?? "(sem texto)"}"`,
           concluido_em: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         })
         .eq("id", job.id);
 
@@ -246,17 +255,35 @@ async function atualizarComResultado(
     }
 
     case "EM_ANALISE": {
-      // Continua em análise — só atualiza o timestamp da última verificação.
+      // Continua em análise: não muda o status, mas carimba updated_at para
+      // ficar registrado QUANDO a guia foi checada pela última vez. Sem isso
+      // não há como distinguir "verificada agora, segue em análise" de
+      // "ninguém olha essa guia há um mês" — foi assim que a verificação
+      // quebrada passou 45 dias despercebida.
       console.log(
         `[cron] ⏳ Guia ${resultado.numero_guia} (${job.paciente_nome_snapshot}) ainda em análise`
       );
+      await supabase
+        .from("unimed_aprovacao_jobs")
+        .update({ updated_at: new Date().toISOString() })
+        .eq("id", job.id);
       return;
     }
 
     case "NAO_ENCONTRADA": {
-      console.warn(
+      // Não é normal: a guia foi gerada por este robô, deveria existir no
+      // portal. Registra no job para aparecer na tela em vez de morrer no log.
+      console.error(
         `[cron] ? Guia ${resultado.numero_guia} (${job.paciente_nome_snapshot}) NÃO encontrada no portal`
       );
+      await supabase
+        .from("unimed_aprovacao_jobs")
+        .update({
+          erro_codigo: "GUIA_NAO_ENCONTRADA_NA_VERIFICACAO",
+          erro_mensagem: resultado.motivo ?? "Guia não encontrada em Consulta Solicitações",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", job.id);
       return;
     }
 
@@ -264,6 +291,14 @@ async function atualizarComResultado(
       console.error(
         `[cron] ERRO ao verificar ${resultado.numero_guia} (${job.paciente_nome_snapshot}): ${resultado.motivo}`
       );
+      await supabase
+        .from("unimed_aprovacao_jobs")
+        .update({
+          erro_codigo: "FALHA_NA_VERIFICACAO",
+          erro_mensagem: resultado.motivo ?? "Erro desconhecido na verificação",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", job.id);
       return;
     }
   }
