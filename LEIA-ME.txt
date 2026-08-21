@@ -68,6 +68,24 @@ DOIS ROBOS:
     Requer QR Code do paciente (webcam)
 
 PROBLEMAS COMUNS:
+  - A janela do iniciar.bat abre e fecha na hora
+      1. Abra de novo. Se o robo tinha acabado de se atualizar, a primeira
+         tentativa falha sozinha (o git pull reescreve o iniciar.bat no meio
+         da execucao) e a segunda funciona.
+      2. Se continuar fechando, o iniciar.bat agora mostra o motivo e espera
+         voce apertar uma tecla. Tire um print da mensagem.
+
+  - "MODULE_NOT_FOUND" / "Cannot find module 'playwright'"
+      As dependencias do robo nao estao instaladas. Rode o instalar.bat.
+      Se voltar sozinho depois de um tempo, veja o item do OneDrive abaixo.
+
+  - NAO deixe a pasta do robo dentro do OneDrive
+      O OneDrive sincroniza os milhares de arquivos do node_modules e, com
+      "Arquivos sob demanda", troca parte deles por atalhos na nuvem. O Node
+      nao acha o arquivo e da MODULE_NOT_FOUND, as vezes so as vezes.
+      Use C:\Robo-Unimed. Se mover a pasta, confira o ROBO_CAMINHO dentro
+      de servidor-local\.env — ele precisa apontar para o novo lugar.
+
   - "Robo offline" no CRM → verificar se iniciar.bat esta rodando
   - "Playwright not found" → rodar: npx playwright install chromium
   - "Permissao da webcam" → na primeira execucao, clicar "Permitir"

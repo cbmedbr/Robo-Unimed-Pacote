@@ -4,6 +4,42 @@ setlocal EnableDelayedExpansion
 set "RAIZ=%~dp0"
 
 rem ---------------------------------------------------------------------
+rem Pre-checagem do ambiente
+rem
+rem Sem isto, uma dependencia faltando aparecia como um stack trace de
+rem MODULE_NOT_FOUND (ou a janela fechando sozinha), sem indicar o que fazer.
+rem ---------------------------------------------------------------------
+where node >nul 2>&1
+if errorlevel 1 (
+    echo.
+    echo ERRO: Node.js nao esta instalado neste computador.
+    echo Baixe em https://nodejs.org e instale, depois rode o instalar.bat.
+    goto :erro
+)
+
+if not exist "%RAIZ%servidor-local\node_modules" (
+    echo.
+    echo ERRO: as dependencias do SERVIDOR nao estao instaladas.
+    echo Feche esta janela e rode o instalar.bat.
+    goto :erro
+)
+
+if not exist "%RAIZ%unimed-mvp-final\node_modules\playwright" (
+    echo.
+    echo ERRO: as dependencias do ROBO nao estao instaladas.
+    echo O servidor ate abre, mas o robo falha na hora de executar a guia.
+    echo Feche esta janela e rode o instalar.bat.
+    goto :erro
+)
+
+if not exist "%RAIZ%servidor-local\.env" (
+    echo.
+    echo ERRO: o arquivo servidor-local\.env nao existe.
+    echo Feche esta janela e rode o instalar.bat para configurar as credenciais.
+    goto :erro
+)
+
+rem ---------------------------------------------------------------------
 rem Troca de senha obrigatoria
 rem
 rem SENHA_VERSAO.txt vem do GitHub e muda quando a senha do portal e
@@ -48,3 +84,18 @@ echo.
 echo Iniciando servidor do Robo Unimed...
 cd /d "%RAIZ%servidor-local"
 npm run dev
+
+rem Se chegou aqui, o servidor PAROU. Nunca deixar a janela fechar sozinha:
+rem sem isto, qualquer falha na largada some da tela antes de ser lida.
+echo.
+echo ============================================================
+echo   O SERVIDOR PAROU
+echo ============================================================
+echo.
+echo Se voce nao fechou de proposito, a mensagem de erro esta
+echo logo acima. Tire um print dela e mande para o responsavel.
+echo.
+
+:erro
+echo.
+pause

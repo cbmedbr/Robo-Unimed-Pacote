@@ -6,6 +6,14 @@
 
 ## 21/08/2026
 
+### Setup: janela do iniciar fechando sozinha sem mostrar o erro
+**Arquivos:** `iniciar-servidor.bat`, `LEIA-ME.txt`
+- Se o servidor falhava na largada, o `.bat` chegava ao fim e a janela fechava antes de dar tempo de ler qualquer coisa — a funcionária só via um piscar
+- Adicionado `pause` no fim de **todos** os caminhos, inclusive o de saída normal do `npm run dev`
+- Pré-checagem antes de subir: Node instalado, `node_modules` do servidor, `node_modules/playwright` do robô e `servidor-local/.env` existente — cada falta com mensagem dizendo o que fazer
+- A checagem do Playwright cobre o caso real que apareceu: o servidor subia normalmente e só o robô morria com `MODULE_NOT_FOUND` ao executar a guia
+- `LEIA-ME.txt` documenta os três sintomas: janela fechando (abrir de novo na primeira vez após atualização), `MODULE_NOT_FOUND`, e o risco de manter a pasta dentro do OneDrive
+
 ### Fix: verificação de guias em análise nunca funcionou — 118 guias paradas
 **Arquivos:** `unimed-mvp-final/src/verificar_status.ts`, `servidor-local/src/verificador.ts`, `DOCUMENTACAO_ROBO.md`
 
