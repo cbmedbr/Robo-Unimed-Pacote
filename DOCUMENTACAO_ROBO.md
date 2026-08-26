@@ -176,6 +176,19 @@ Antes de abrir o browser, valida:
 **Comando:** `npx tsx src/index.ts executar-sessao`  
 **Sempre visível** (headless=false) — operador precisa apresentar QR Code da webcam.
 
+### Payload de entrada (`POST /executar-sessao`)
+
+```
+{ sessao_id, guia: { id, codigo, paciente_tipo }, paciente: { nome_completo, carteirinha },
+  data_execucao, qrcode_valor }
+```
+
+- **`guia.codigo`** — o robô digita no filtro do portal para achar a guia.
+- **`guia.id`** (desde 26/08/2026) — a guia escolhida no CRM. O servidor grava em `agendamentos.guia_id` ao concluir e no job (`unimed_execucao_jobs.guia_id`). **Antes só o código ia:** o servidor terminava, relia `agendamentos.guia_id` — o que já estava lá, ou o que o gatilho `trg_vincular_guia_ao_executar` preenchia sozinho — e creditava `sessoes_executadas` naquela guia. A guia aberta no portal e a debitada no CRM podiam ser diferentes.
+- **`qrcode_valor`** — gravado em `agendamentos.token_execucao` e no job. **Estava sendo descartado pelo CRM**: a função `dispararExecucaoSessao` recebia o campo e não o punha no payload. Medição de 26/08/2026: 3.391 jobs desde 09/06 com **zero** `qrcode_valor`, e 2.287 execuções do robô com **1** token gravado. A checagem de "QR Code já utilizado" no modal consulta essa coluna — nunca achou nada. Corrigido no CRM.
+
+**Crédito de `sessoes_executadas`:** a fonte da verdade continua sendo o `agendamentos.guia_id` **relido depois** do update, não o `guia.id` recebido — o gatilho do banco pode recusar ou substituir a guia enviada, e creditar a que a tela pediu quando o banco gravou outra deixaria o saldo errado. Quando os dois diferem, o servidor registra o aviso no log.
+
 ### Etapa 1: Login
 Mesmo `fazerLogin()` da autorização.
 
@@ -187,6 +200,11 @@ Mesmo `fazerLogin()` da autorização.
 5. Verifica contagem de exames encontrados
 6. Clica na guia pelo código (ou primeira da lista)
 7. Aguarda URL conter `/sadt/execucao.do`
+8. Devolve `{ codigoConfere, codigoPedido }`
+
+**Qual guia é executada (revisado em 26/08/2026).** O código vem do CRM em `guia.codigo` e o robô clica no link que casa com ele. Se aquele código **não estiver em "exames em aberto"**, ele cai num fallback e abre a **primeira da lista** — a mais recente.
+
+Isso era só uma linha de log. A partir de 26/08/2026 o CRM deixa a colaboradora **escolher** qual guia executar, então executar outra deixou de ser detalhe: `buscarEAbrirGuia` devolve `codigoConfere: false`, `executar_sessao.ts` repassa no resultado, e o servidor grava o aviso em `unimed_execucao_jobs.erro_mensagem` mesmo quando o job dá `sucesso`. Sem isso a pessoa escolhia a guia A, o robô executava a B e nada na tela dizia.
 
 ### Etapas 4-5: Preparar execução (`execucao/preparar_execucao.ts`)
 - Lê quantidade solicitada/autorizada dos campos `QT_SOLIC_1` e `QT_AUTORIZADA_1`

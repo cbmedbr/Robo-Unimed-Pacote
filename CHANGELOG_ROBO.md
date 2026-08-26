@@ -4,6 +4,21 @@
 
 ---
 
+## 26/08/2026
+
+### Feat: a guia executada passa a ser a escolhida no CRM, e fica registrada
+**Arquivos:** `servidor-local/src/index.ts`, `servidor-local/src/executor-sessao.ts`, `unimed-mvp-final/src/execucao/buscar_e_abrir_guia.ts`, `unimed-mvp-final/src/execucao/tipos.ts`, `unimed-mvp-final/src/executar_sessao.ts`, migration `execucao_job_registra_guia_escolhida`
+- O CRM passou a deixar a colaboradora **ver e escolher** qual guia executar. O payload ganhou `guia.id` além do `guia.codigo`
+- O servidor grava essa guia em `agendamentos.guia_id` junto com o `status_execucao`. **Antes não gravava:** ele relia a guia já vinculada ao agendamento (ou a que o gatilho escolhia sozinho) e creditava `sessoes_executadas` nela — a guia aberta no portal e a debitada no CRM podiam divergir sem registro
+- `unimed_execucao_jobs.guia_id` (coluna nova) guarda a escolha, com índice para consultar o histórico por guia
+- O crédito de `sessoes_executadas` continua saindo do `agendamentos.guia_id` **relido depois** do update: o gatilho do banco pode recusar a guia enviada, e creditar a pedida deixaria o saldo errado. Divergência entre as duas vira `console.warn`
+
+### Fix: fallback silencioso quando a guia pedida não está em exames em aberto
+**Arquivos:** `unimed-mvp-final/src/execucao/buscar_e_abrir_guia.ts`, `unimed-mvp-final/src/executar_sessao.ts`, `servidor-local/src/executor-sessao.ts`
+- Se o código pedido não aparece na lista, o robô abre a **primeira** (mais recente). Isso existia desde sempre e só saía num `logger.info`
+- Agora `buscarEAbrirGuia` devolve `{ codigoConfere, codigoPedido }`, o resultado carrega os campos e o servidor grava o aviso em `erro_mensagem` mesmo com job em `sucesso`
+- Não interrompe a execução: a sessão foi executada de fato. O que muda é que deixa rastro
+
 ## 21/08/2026
 
 ### Fix: scripts .bat com quebra de linha LF corrompiam a própria execução

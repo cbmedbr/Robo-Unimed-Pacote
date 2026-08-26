@@ -17,6 +17,14 @@ export interface ResultadoExecucao {
   erro_codigo?: string;
   erro_mensagem?: string;
   duracao_ms?: number;
+  /**
+   * false quando o portal nao tinha a guia pedida em "exames em aberto" e o
+   * robo abriu a primeira da lista. O CRM passou a deixar a colaboradora
+   * escolher a guia, entao esse desvio precisa chegar ao job em vez de morrer
+   * no log do robo.
+   */
+  guia_codigo_confere?: boolean;
+  guia_codigo_pedido?: string;
 }
 
 export class RoboError extends Error {

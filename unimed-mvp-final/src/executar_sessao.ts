@@ -94,7 +94,19 @@ export async function executarSessao(
 
     // 2-3. Buscar e abrir guia
     logger.info("=== ETAPAS 2-3: BUSCAR E ABRIR GUIA ===");
-    await buscarEAbrirGuia(page, dados.paciente.nome_completo, config.navegacaoTimeout, dados.guia?.codigo);
+    const aberturaGuia = await buscarEAbrirGuia(
+      page, dados.paciente.nome_completo, config.navegacaoTimeout, dados.guia?.codigo
+    );
+    if (dados.guia?.codigo && !aberturaGuia.codigoConfere) {
+      // Nao interrompe: a guia foi aberta e a sessao vai ser executada. Mas a
+      // colaboradora escolheu uma guia especifica na tela, e o portal nao a
+      // tinha em exames em aberto — isso volta no resultado para o servidor
+      // registrar no job, em vez de morrer no log do robo.
+      logger.warn(
+        { codigoPedido: aberturaGuia.codigoPedido },
+        "guia pedida não estava em exames em aberto — executando a primeira da lista"
+      );
+    }
 
     // 4-5. Preparar execução (regime + validar sessões)
     logger.info("=== ETAPAS 4-5: PREPARAR EXECUÇÃO ===");
@@ -369,6 +381,8 @@ export async function executarSessao(
       sucesso: true,
       comprovante_path: comprovantePath,
       duracao_ms: duracao,
+      guia_codigo_confere: aberturaGuia.codigoConfere,
+      guia_codigo_pedido: aberturaGuia.codigoPedido,
     };
   } catch (err) {
     const duracao = Date.now() - inicio;
