@@ -17,6 +17,10 @@ await fs.mkdir(PASTA_TEMP, { recursive: true });
 export interface DadosExecucaoSessao {
   sessao_id: string;
   guia: {
+    // `id` e a guia que a colaboradora escolheu na tela. O `codigo` e o que o
+    // robo digita no filtro do portal; o `id` e o que gravamos no agendamento
+    // ao concluir, para o CRM debitar a MESMA guia que foi executada la.
+    id?: string | null;
     codigo: string;
     paciente_tipo: "LOCAL" | "INTERCAMBIO";
   };
@@ -34,6 +38,9 @@ interface ResultadoExecucao {
   erro_codigo?: string;
   erro_mensagem?: string;
   duracao_ms?: number;
+  /** false quando o portal nao tinha a guia pedida e o robo abriu a primeira */
+  guia_codigo_confere?: boolean;
+  guia_codigo_pedido?: string;
 }
 
 // ============================================================================
@@ -191,6 +198,15 @@ export async function executarSessaoJob(
       if (dados.qrcode_valor) {
         agUpdate.token_execucao = dados.qrcode_valor;
       }
+      // A guia escolhida na tela e a que foi executada no portal — grava ela no
+      // agendamento. Sem isto o UPDATE ia sem guia_id, o gatilho
+      // trg_vincular_guia_ao_executar mantinha a que ja estava vinculada (ou
+      // escolhia uma sozinho, pela data de emissao mais antiga), e o credito de
+      // sessoes_executadas mais abaixo caia numa guia possivelmente diferente da
+      // que o robo abriu na Unimed.
+      if (dados.guia?.id) {
+        agUpdate.guia_id = dados.guia.id;
+      }
 
       let agOk = false;
       for (let tentativa = 0; tentativa < 2; tentativa++) {
@@ -213,18 +229,46 @@ export async function executarSessaoJob(
       }
 
       // DEPOIS: marcar job como sucesso (ou sucesso_parcial se agendamento não atualizou)
+      // A guia pedida pode nao estar em "exames em aberto" — o robo entao abre a
+      // primeira da lista. Isso era so um log dentro do robo; agora que a
+      // colaboradora escolhe a guia na tela, precisa aparecer no job.
+      const guiaDivergiu = resultado.guia_codigo_confere === false;
+      if (guiaDivergiu) {
+        console.warn(
+          `[exec-${jobId}] ⚠️ Guia ${resultado.guia_codigo_pedido} não estava em exames em aberto — o portal executou a primeira da lista`
+        );
+      }
+
+      const avisoGuia = guiaDivergiu
+        ? `Guia ${resultado.guia_codigo_pedido} não estava em exames em aberto — o portal executou a primeira da lista.`
+        : null;
+      const avisoAgendamento = agOk
+        ? null
+        : "Executado na Unimed mas falhou ao atualizar agendamento no CRM";
+      const avisos = [avisoAgendamento, avisoGuia].filter(Boolean).join(" ");
+
       await atualizarStatus(jobId, agOk ? "sucesso" : "sucesso_parcial", {
         comprovante_url: resultado.comprovante_path || null,
         duracao_ms: resultado.duracao_ms || (Date.now() - inicioMs),
-        ...(agOk ? {} : { erro_mensagem: "Executado na Unimed mas falhou ao atualizar agendamento no CRM" }),
+        ...(avisos ? { erro_mensagem: avisos } : {}),
       });
 
-      // Incrementar sessoes_executadas na guia
+      // Incrementar sessoes_executadas na guia.
+      // Fonte da verdade: a guia que o agendamento tem DEPOIS do update acima.
+      // Releitura em vez de confiar em dados.guia.id porque o gatilho do banco
+      // pode ter recusado ou substituido a guia enviada — creditar a que a tela
+      // pediu, quando o banco gravou outra, e como o saldo saia errado.
       const { data: agData } = await supabase
         .from("agendamentos")
         .select("guia_id")
         .eq("id", dados.sessao_id)
         .maybeSingle();
+
+      if (dados.guia?.id && agData?.guia_id && agData.guia_id !== dados.guia.id) {
+        console.warn(
+          `[exec-${jobId}] ⚠️ Guia escolhida (${dados.guia.id}) difere da gravada (${agData.guia_id}) — creditando a gravada`
+        );
+      }
 
       if (agData?.guia_id) {
         const { data: guiaData } = await supabase

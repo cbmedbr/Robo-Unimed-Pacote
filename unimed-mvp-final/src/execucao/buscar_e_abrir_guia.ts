@@ -8,12 +8,24 @@ import { RoboError } from "./tipos";
  *
  * Baseado no fluxo confirmado do robô de coleta (examesEmAberto.ts).
  */
+/**
+ * O que aconteceu na escolha da guia. O CRM passou a deixar a colaboradora
+ * escolher qual guia executar, entao "abriu outra" deixou de ser detalhe de
+ * log: ela precisa saber que a guia pedida nao estava em exames em aberto.
+ */
+export interface ResultadoAberturaGuia {
+  /** true quando abrimos exatamente a guia pedida */
+  codigoConfere: boolean;
+  /** codigo pedido pelo CRM (vazio quando nenhum foi enviado) */
+  codigoPedido: string;
+}
+
 export async function buscarEAbrirGuia(
   page: Page,
   nomePaciente: string,
   timeout: number,
   codigoGuia?: string
-): Promise<void> {
+): Promise<ResultadoAberturaGuia> {
   // 1. Navegar pelo menu (igual robô de coleta)
   logger.info("navegando pelo menu: Exames > Exames em aberto");
 
@@ -65,6 +77,7 @@ export async function buscarEAbrirGuia(
   }
 
   // 5. Clicar na guia correta
+  let codigoConfere = false;
   if (codigoGuia) {
     // Tenta clicar no link que contém o código da guia
     const linkGuia = page.locator(`a.MagnetoDataLink:has-text("${codigoGuia}")`).first();
@@ -72,9 +85,12 @@ export async function buscarEAbrirGuia(
     if (visivel) {
       logger.info({ codigoGuia }, "clicando na guia pelo código");
       await linkGuia.click({ timeout });
+      codigoConfere = true;
     } else {
       // Fallback: clica na primeira (mais recente)
-      logger.info("código da guia não encontrado na lista, clicando na primeira");
+      // Volta no resultado: quem escolheu a guia na tela precisa saber que o
+      // robo executou outra.
+      logger.warn({ codigoGuia }, "código da guia não encontrado na lista, clicando na primeira");
       await page.locator("tbody tr:nth-child(2) a.MagnetoDataLink").first().click({ timeout });
     }
   } else {
@@ -87,4 +103,6 @@ export async function buscarEAbrirGuia(
   await page.waitForURL(/\/sadt\/execucao\.do/, { timeout });
 
   logger.info("tela de execução da guia aberta");
+
+  return { codigoConfere, codigoPedido: codigoGuia || "" };
 }

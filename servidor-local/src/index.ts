@@ -197,6 +197,7 @@ app.post("/executar-sessao", async (req, res) => {
       paciente_nome_snapshot: dados.paciente.nome_completo,
       paciente_carteirinha_snapshot: dados.paciente.carteirinha,
       guia_codigo_snapshot: dados.guia?.codigo || "",
+      guia_id: dados.guia?.id || null,
       data_execucao_snapshot: dados.data_execucao || new Date().toISOString().slice(0, 10),
       qrcode_valor: dados.qrcode_valor || null,
       status: "pendente",
