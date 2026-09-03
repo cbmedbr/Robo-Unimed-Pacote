@@ -430,6 +430,39 @@ async function atualizarJobComResultado(
       .select("id")
       .maybeSingle();
 
+    // `.select().maybeSingle()` pode voltar sem linha mesmo com o insert tendo
+    // funcionado. Quando isso acontece, a guia existe mas o job fica com
+    // guia_id nulo — e o gatilho do CRM que tipa a guia (trg_marcar_guia_robo)
+    // só dispara no UPDATE que preenche guia_id. Resultado: guia nasce com o
+    // tipo default (psicoterapia) e uma sessão de ABA não pode consumi-la.
+    //
+    // Havia 28 jobs nessa situação, 6 deles com guia existente no CRM.
+    // Recupera o id pelo código da guia antes de desistir.
+    let guiaId: string | null = novaGuia?.id ?? null;
+
+    if (!guiaErr && !guiaId && resultado.numero_guia) {
+      const { data: recuperada } = await supabase
+        .from("guias")
+        .select("id")
+        .eq("codigo_guia", resultado.numero_guia)
+        .eq("paciente_id", job.paciente_id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      guiaId = recuperada?.id ?? null;
+
+      if (guiaId) {
+        console.log(`[${jobId}] guia_id recuperado por codigo_guia: ${guiaId}`);
+      } else {
+        console.error(
+          `[${jobId}] ⚠️ Guia ${resultado.numero_guia} ficou sem guia_id no job. ` +
+            `A guia NÃO será tipada pelo CRM e vai herdar o tipo default — ` +
+            `procedimento era ${job.procedimento_codigo} (${job.procedimento_categoria}).`
+        );
+      }
+    }
+
     // Status do job:
     //   negado             → guia gerada mas Unimed negou
     //   sucesso_em_analise → guia gerada mas portal indicou "Em estudo/análise"
@@ -463,7 +496,7 @@ async function atualizarJobComResultado(
       .from("unimed_aprovacao_jobs")
       .update({
         status: statusJob,
-        guia_id: novaGuia?.id ?? null,
+        guia_id: guiaId,
         numero_guia_unimed: resultado.numero_guia ?? null,
         senha_autorizacao: resultado.senha_autorizacao ?? null,
         situacao_unimed: resultado.situacao ?? null,

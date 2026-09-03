@@ -4,6 +4,18 @@
 
 ---
 
+## 03/09/2026
+
+### Fix: job podia ficar sem `guia_id`, deixando a guia sem tipo de atendimento
+**Arquivos:** `servidor-local/src/executor.ts`
+- Contexto: o CRM passou a controlar guias por tipo de atendimento, e o gatilho `trg_marcar_guia_robo` grava `guias.tipo_procedimento` **no UPDATE que preenche `unimed_aprovacao_jobs.guia_id`**. Sem esse UPDATE a guia herda o tipo default (psicoterapia) e uma sessão de ABA, psicopedagogia ou neuro não pode consumi-la
+- O insert da guia usa `.select("id").maybeSingle()`, que pode voltar sem linha mesmo tendo gravado. Nesse caso o job recebia `guia_id: null` sem registrar erro nenhum
+- Auditoria encontrou **28 jobs** concluídos nessa situação (26/06 a 21/08), **6 deles com guia existente no CRM** — essas guias nunca passaram pelo gatilho
+- Agora, se o insert não devolve o id, o servidor recupera pelo `codigo_guia` + `paciente_id`. Se ainda assim não achar, grava erro no console dizendo qual procedimento ficou sem tipagem
+- Nenhuma alteração no fluxo do portal, no login, nos seletores ou na execução de sessão
+
+---
+
 ## 26/08/2026
 
 ### Feat: a guia executada passa a ser a escolhida no CRM, e fica registrada
