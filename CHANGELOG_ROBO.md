@@ -6,6 +6,16 @@
 
 ## 03/09/2026
 
+### Feat: comprovante da guia passa a ser anexado no CRM
+**Arquivos:** `servidor-local/src/executor.ts`
+- O robô já tirava o print do comprovante, mas o arquivo ficava **só no disco da máquina que rodou o job**. O servidor guardava o caminho local em `unimed_aprovacao_jobs.comprovante_path`, um campo de diagnóstico que a tela de guias não lê
+- A coluna PROTOCOLO do CRM mostra `guias.protocolo_path`, que o robô nunca preenchia. Resultado: **só 20% das guias do robô tinham protocolo** (423 de 2.116), contra 87% das manuais — a diferença era a equipe subindo à mão depois
+- Agora o servidor sobe o PNG para o bucket `documentos` em `guias/<guia_id>/protocolo_<timestamp>.png` e grava o caminho em `guias.protocolo_path`
+- Falha no upload **não derruba o job**: a guia já existe na Unimed e no CRM, então vira aviso no console
+- Testado contra o Storage real: upload, download, URL assinada e remoção
+- Ficam de fora as ~1.693 guias antigas sem protocolo; os prints delas ainda estão nos discos das máquinas e precisariam de um script rodando em cada uma
+
+
 ### Fix: valor padrão silencioso deixou 673 guias com validade um mês curta
 **Arquivos:** `servidor-local/src/executor.ts`
 - Renovação criada nos **últimos 7 dias** de um mês pertence ao mês seguinte. O robô aplica essa regra desde 10/08 e devolve `mes_utilizacao` e `data_emissao_sgu`

@@ -143,6 +143,54 @@ async function jobParaInputRobo(job: UnimedJob): Promise<{
 }
 
 /**
+ * Sobe o print do comprovante para o Storage e preenche `guias.protocolo_path`,
+ * que é a coluna PROTOCOLO da tela de guias do CRM.
+ *
+ * O robô salva o PNG no disco da máquina onde rodou. Como o servidor é quem
+ * dispara o robô, o arquivo está no disco local dele neste momento — depois
+ * disso, ninguém mais alcança.
+ *
+ * Nunca derruba o job: a guia já existe na Unimed e no CRM. Falha aqui vira
+ * aviso no console, não erro de autorização.
+ */
+async function subirProtocolo(
+  jobId: string,
+  guiaId: string | null,
+  caminhoLocal: string | null
+): Promise<void> {
+  if (!guiaId || !caminhoLocal) return;
+
+  try {
+    const arquivo = await fs.readFile(caminhoLocal);
+    const destino = `guias/${guiaId}/protocolo_${Date.now()}.png`;
+
+    const { error: upErr } = await supabase.storage
+      .from("documentos")
+      .upload(destino, arquivo, { contentType: "image/png", upsert: false });
+
+    if (upErr) {
+      console.warn(`[${jobId}] Não consegui subir o comprovante: ${upErr.message}`);
+      return;
+    }
+
+    const { error: updErr } = await supabase
+      .from("guias")
+      .update({ protocolo_path: destino })
+      .eq("id", guiaId);
+
+    if (updErr) {
+      console.warn(`[${jobId}] Comprovante subiu mas não gravei em guias.protocolo_path: ${updErr.message}`);
+      return;
+    }
+
+    console.log(`[${jobId}] Comprovante anexado à guia: ${destino}`);
+  } catch (e: any) {
+    // Arquivo pode não existir (execução antiga, disco limpo). Não é fatal.
+    console.warn(`[${jobId}] Comprovante não anexado (${caminhoLocal}): ${e.message}`);
+  }
+}
+
+/**
  * Espelho da regra de ciclo mensal do robô (`autorizacao.ts`).
  *
  * Renovação criada nos ÚLTIMOS 7 DIAS de um mês pertence ao mês SEGUINTE —
@@ -574,6 +622,11 @@ async function atualizarJobComResultado(
         duracao_ms: resultado.duracao_ms,
       })
       .eq("id", jobId);
+
+    // Sobe o comprovante para o CRM. Antes ficava só no disco da máquina que
+    // rodou o job, e a coluna PROTOCOLO da tela de guias aparecia vazia — a
+    // equipe subia à mão depois (só 20% das guias do robô tinham protocolo).
+    await subirProtocolo(jobId, guiaId, resultado.comprovante_path ?? null);
 
     if (negada) {
       console.log(
