@@ -6,6 +6,21 @@
 
 ## 03/09/2026
 
+### Fix: robô não iniciava em pasta com acento no caminho
+**Arquivos:** `servidor-local/src/executor.ts`, `servidor-local/src/executor-sessao.ts`, `servidor-local/src/verificador.ts`
+- O caminho do `tsx` era montado com `new URL(...).pathname`, que faz **percent-encoding**: numa pasta como `C:\Users\João\...` o caminho virava `Jo%C3%A3o`, que não existe
+- O robô morria antes de carregar, com `Cannot find module ...cli.mjs` e saída 1 — reportado como `ROBO_FALHOU`, sem pista da causa. **29 jobs falharam em sequência** por isso
+- Corrigido com `fileURLToPath()` nos três arquivos que disparam o robô
+- Só afeta máquinas cujo caminho tem caractere não-ASCII. Onde a pasta é `C:\Robo-Unimed` o robô sempre funcionou — foi por isso que o problema pareceu aleatório
+- O `verificador.ts` também deixou de usar `npx tsx` (que só funcionava se o tsx estivesse no cache do npx; a pasta do robô não o tem) e passou a usar `node` + o tsx do servidor, igual ao executor
+- Removido `shell: true` do verificador: era necessário para o `npx`, mas com o `node` direto o cmd reinterpreta aspas e quebra caminhos com espaço
+
+### Nota operacional: `ROBO_CAMINHO` corrompido por codificação
+- Um `.env` escrito à mão pelo Bloco de Notas gravou `ROBO_CAMINHO=C:\Users\Jo?o\...`, com o "ã" corrompido
+- A pasta não existia, e o Windows relata isso como `ENOENT` **no executável do Node** — o erro dizia "spawn node.exe ENOENT" com o Node instalado e funcionando
+- Ao criar `.env` à mão, salve em UTF-8. Melhor ainda: mantenha o robô num caminho sem acentos
+
+
 ### Fix: job podia ficar sem `guia_id`, deixando a guia sem tipo de atendimento
 **Arquivos:** `servidor-local/src/executor.ts`
 - Contexto: o CRM passou a controlar guias por tipo de atendimento, e o gatilho `trg_marcar_guia_robo` grava `guias.tipo_procedimento` **no UPDATE que preenche `unimed_aprovacao_jobs.guia_id`**. Sem esse UPDATE a guia herda o tipo default (psicoterapia) e uma sessão de ABA, psicopedagogia ou neuro não pode consumi-la

@@ -8,6 +8,7 @@ import { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { fileURLToPath } from "node:url";
 import { config } from "./config.js";
 import { supabase } from "./supabase.js";
 
@@ -85,7 +86,9 @@ function rodarSubprocesso(jobId: string, inputPath: string): Promise<ResultadoEx
       resolve(r);
     }
 
-    const tsxCli = new URL("../node_modules/tsx/dist/cli.mjs", import.meta.url).pathname.replace(/^\/([A-Z]:)/i, "$1");
+    // fileURLToPath, NÃO `.pathname`: pathname faz percent-encoding e uma pasta
+    // com acento vira "Jo%C3%A3o", caminho que não existe. Ver executor.ts.
+    const tsxCli = fileURLToPath(new URL("../node_modules/tsx/dist/cli.mjs", import.meta.url));
     const scriptPath = config.roboCaminho + "/src/index.ts";
     const proc = spawn(
       process.execPath,

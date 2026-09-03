@@ -8,6 +8,7 @@ import { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { fileURLToPath } from "node:url";
 import { config } from "./config.js";
 import { supabase } from "./supabase.js";
 
@@ -92,9 +93,14 @@ async function rodarVerificadorSubprocesso(
       resolve(r);
     }
 
+    // Mesmo padrão do executor: node + tsx do servidor, com caminho resolvido
+    // por fileURLToPath. Antes era `npx tsx`, que só funcionava se o tsx
+    // estivesse no cache do npx — a pasta do robô não o tem instalado.
+    const tsxCli = fileURLToPath(new URL("../node_modules/tsx/dist/cli.mjs", import.meta.url));
+
     const proc = spawn(
-      "npx",
-      ["tsx", "src/index.ts", "verificar", "--guias-file", arquivo],
+      process.execPath,
+      [tsxCli, "src/index.ts", "verificar", "--guias-file", arquivo],
       {
         cwd: config.roboCaminho,
         env: {
@@ -104,7 +110,9 @@ async function rodarVerificadorSubprocesso(
           // Verificação roda invisível por padrão (não atrapalha a recepcionista)
           HEADLESS: "true",
         },
-        shell: process.platform === "win32",
+        // Sem shell: era necessário para o `npx`, mas com o node direto ele
+        // só atrapalha — o cmd reinterpreta aspas e quebra caminhos com
+        // espaço, como "C:\Program Files\nodejs\node.exe".
       }
     );
 
