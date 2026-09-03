@@ -142,6 +142,46 @@ async function jobParaInputRobo(job: UnimedJob): Promise<{
   return { input, pdfLocalPath: pdfLocal };
 }
 
+/**
+ * Espelho da regra de ciclo mensal do robô (`autorizacao.ts`).
+ *
+ * Renovação criada nos ÚLTIMOS 7 DIAS de um mês pertence ao mês SEGUINTE —
+ * é a renovação antecipada da competência que vem. Fora dessa janela, a guia
+ * é do mês corrente e a data de emissão vai para o dia 1º.
+ *
+ * Existe aqui só como rede de segurança para máquinas com o robô
+ * desatualizado. A fonte da verdade continua sendo o robô, que sabe a hora
+ * real em que falou com o portal.
+ */
+function calcularCicloMensal(isPrimeiraGuia: boolean): {
+  dataEmissao: string;
+  mesUtilizacao: string;
+} {
+  const iso = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+  const hoje = new Date();
+  const ultimoDia = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
+  const ehProximoMes = ultimoDia - hoje.getDate() < 7;
+
+  if (isPrimeiraGuia) {
+    return {
+      dataEmissao: iso(hoje),
+      mesUtilizacao: iso(new Date(hoje.getFullYear(), hoje.getMonth(), 1)),
+    };
+  }
+
+  if (ehProximoMes) {
+    return {
+      dataEmissao: iso(hoje),
+      mesUtilizacao: iso(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 1)),
+    };
+  }
+
+  const primeiroDia = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+  return { dataEmissao: iso(primeiroDia), mesUtilizacao: iso(primeiroDia) };
+}
+
 async function buscarTelefonePaciente(pacienteId: string): Promise<string> {
   const { data } = await supabase
     .from("pacientes")
@@ -397,9 +437,32 @@ async function atualizarJobComResultado(
         : "ativa";
 
     // data_emissao = data que foi preenchida no SGU (dia 1 ou hoje se últimos 7 dias)
-    const dataEmissao = resultado.data_emissao_sgu || new Date().toISOString().slice(0, 10);
     // mes_utilizacao = mês para o qual a guia vale (ex: 2026-08-01)
-    const mesUtilizacao = resultado.mes_utilizacao || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
+    //
+    // O robô devolve os dois. Quando ele NÃO devolve, é sinal de que aquela
+    // máquina está com código anterior a 10/08 — e aí o valor precisa ser
+    // calculado aqui, pela MESMA regra, em vez de assumir "mês atual".
+    //
+    // O `|| mês atual` que existia aqui antes causou 673 guias com validade um
+    // mês curta: toda renovação feita nos últimos 7 dias de um mês pertence ao
+    // mês seguinte, e o padrão silencioso jogava para o mês corrente sem avisar
+    // ninguém. Nunca troque isto por um valor "plausível" outra vez.
+    const cicloRobo = resultado.mes_utilizacao && resultado.data_emissao_sgu;
+
+    if (!cicloRobo) {
+      console.error(
+        `[${jobId}] ⚠️ O robô não devolveu mes_utilizacao/data_emissao_sgu. ` +
+          `A máquina que executou está com código desatualizado (anterior a 10/08). ` +
+          `Calculando aqui pela mesma regra, mas ATUALIZE aquela máquina.`
+      );
+    }
+
+    const ciclo = cicloRobo
+      ? { dataEmissao: resultado.data_emissao_sgu!, mesUtilizacao: resultado.mes_utilizacao! }
+      : calcularCicloMensal(job.is_primeira_guia ?? false);
+
+    const dataEmissao = ciclo.dataEmissao;
+    const mesUtilizacao = ciclo.mesUtilizacao;
 
     // data_validade:
     //   Renovação:     dia 7 do mês seguinte ao mes_utilizacao

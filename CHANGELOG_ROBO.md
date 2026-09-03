@@ -6,6 +6,16 @@
 
 ## 03/09/2026
 
+### Fix: valor padrão silencioso deixou 673 guias com validade um mês curta
+**Arquivos:** `servidor-local/src/executor.ts`
+- Renovação criada nos **últimos 7 dias** de um mês pertence ao mês seguinte. O robô aplica essa regra desde 10/08 e devolve `mes_utilizacao` e `data_emissao_sgu`
+- O servidor tinha `resultado.mes_utilizacao || primeiroDiaDoMesAtual`. Em máquinas com robô desatualizado o campo não vinha, e o padrão jogava a guia para o **mês corrente** — validade um mês mais curta, sem nenhum aviso
+- Levantamento: das renovações criadas nos últimos 7 dias do mês depois de 10/08, **658 ficaram no mês errado e nenhuma no mês certo**. Somando todo o histórico, **673 guias** entre 29/06 e 31/08
+- Agora o servidor detecta a ausência do campo, **registra erro no console apontando a máquina desatualizada**, e calcula pelo mesmo critério do robô (`calcularCicloMensal`) em vez de assumir o mês atual
+- Dados corrigidos: 660 guias tiveram `mes_utilizacao` e `data_validade` recalculadas. As outras 13 são guias negadas, sem validade — nada a corrigir. Backup em `_backup_validade_20260903`
+- É o mesmo vício da verificação de guias: quando o dado não chega, inventar um plausível esconde a falha por meses
+
+
 ### Fix: robô não iniciava em pasta com acento no caminho
 **Arquivos:** `servidor-local/src/executor.ts`, `servidor-local/src/executor-sessao.ts`, `servidor-local/src/verificador.ts`
 - O caminho do `tsx` era montado com `new URL(...).pathname`, que faz **percent-encoding**: numa pasta como `C:\Users\João\...` o caminho virava `Jo%C3%A3o`, que não existe
