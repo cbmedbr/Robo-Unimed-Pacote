@@ -11,6 +11,7 @@ import { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { fileURLToPath } from "node:url";
 import { config } from "./config.js";
 import { supabase } from "./supabase.js";
 import type { UnimedJob, InputAutorizacaoRobo, ResultadoRobo } from "./types.js";
@@ -141,6 +142,46 @@ async function jobParaInputRobo(job: UnimedJob): Promise<{
   return { input, pdfLocalPath: pdfLocal };
 }
 
+/**
+ * Espelho da regra de ciclo mensal do robô (`autorizacao.ts`).
+ *
+ * Renovação criada nos ÚLTIMOS 7 DIAS de um mês pertence ao mês SEGUINTE —
+ * é a renovação antecipada da competência que vem. Fora dessa janela, a guia
+ * é do mês corrente e a data de emissão vai para o dia 1º.
+ *
+ * Existe aqui só como rede de segurança para máquinas com o robô
+ * desatualizado. A fonte da verdade continua sendo o robô, que sabe a hora
+ * real em que falou com o portal.
+ */
+function calcularCicloMensal(isPrimeiraGuia: boolean): {
+  dataEmissao: string;
+  mesUtilizacao: string;
+} {
+  const iso = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+  const hoje = new Date();
+  const ultimoDia = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
+  const ehProximoMes = ultimoDia - hoje.getDate() < 7;
+
+  if (isPrimeiraGuia) {
+    return {
+      dataEmissao: iso(hoje),
+      mesUtilizacao: iso(new Date(hoje.getFullYear(), hoje.getMonth(), 1)),
+    };
+  }
+
+  if (ehProximoMes) {
+    return {
+      dataEmissao: iso(hoje),
+      mesUtilizacao: iso(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 1)),
+    };
+  }
+
+  const primeiroDia = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+  return { dataEmissao: iso(primeiroDia), mesUtilizacao: iso(primeiroDia) };
+}
+
 async function buscarTelefonePaciente(pacienteId: string): Promise<string> {
   const { data } = await supabase
     .from("pacientes")
@@ -249,7 +290,12 @@ function rodarSubprocesso(jobId: string, inputPath: string): Promise<ResultadoRo
     }
 
     // Usa node diretamente com tsx CLI — evita problemas de shell/npx no Node v26
-    const tsxCli = new URL("../node_modules/tsx/dist/cli.mjs", import.meta.url).pathname.replace(/^\/([A-Z]:)/i, "$1");
+    //
+    // fileURLToPath, NÃO `.pathname`: pathname faz percent-encoding, então uma
+    // pasta com acento vira "Jo%C3%A3o" e o caminho deixa de existir. O robô
+    // morria sem carregar, com "Cannot find module ...cli.mjs" e saída 1 —
+    // reportado como ROBO_FALHOU, sem pista da causa.
+    const tsxCli = fileURLToPath(new URL("../node_modules/tsx/dist/cli.mjs", import.meta.url));
     const scriptPath = config.roboCaminho + "/src/index.ts";
     const proc = spawn(
       process.execPath,
@@ -391,9 +437,32 @@ async function atualizarJobComResultado(
         : "ativa";
 
     // data_emissao = data que foi preenchida no SGU (dia 1 ou hoje se últimos 7 dias)
-    const dataEmissao = resultado.data_emissao_sgu || new Date().toISOString().slice(0, 10);
     // mes_utilizacao = mês para o qual a guia vale (ex: 2026-08-01)
-    const mesUtilizacao = resultado.mes_utilizacao || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
+    //
+    // O robô devolve os dois. Quando ele NÃO devolve, é sinal de que aquela
+    // máquina está com código anterior a 10/08 — e aí o valor precisa ser
+    // calculado aqui, pela MESMA regra, em vez de assumir "mês atual".
+    //
+    // O `|| mês atual` que existia aqui antes causou 673 guias com validade um
+    // mês curta: toda renovação feita nos últimos 7 dias de um mês pertence ao
+    // mês seguinte, e o padrão silencioso jogava para o mês corrente sem avisar
+    // ninguém. Nunca troque isto por um valor "plausível" outra vez.
+    const cicloRobo = resultado.mes_utilizacao && resultado.data_emissao_sgu;
+
+    if (!cicloRobo) {
+      console.error(
+        `[${jobId}] ⚠️ O robô não devolveu mes_utilizacao/data_emissao_sgu. ` +
+          `A máquina que executou está com código desatualizado (anterior a 10/08). ` +
+          `Calculando aqui pela mesma regra, mas ATUALIZE aquela máquina.`
+      );
+    }
+
+    const ciclo = cicloRobo
+      ? { dataEmissao: resultado.data_emissao_sgu!, mesUtilizacao: resultado.mes_utilizacao! }
+      : calcularCicloMensal(job.is_primeira_guia ?? false);
+
+    const dataEmissao = ciclo.dataEmissao;
+    const mesUtilizacao = ciclo.mesUtilizacao;
 
     // data_validade:
     //   Renovação:     dia 7 do mês seguinte ao mes_utilizacao
@@ -430,6 +499,39 @@ async function atualizarJobComResultado(
       .select("id")
       .maybeSingle();
 
+    // `.select().maybeSingle()` pode voltar sem linha mesmo com o insert tendo
+    // funcionado. Quando isso acontece, a guia existe mas o job fica com
+    // guia_id nulo — e o gatilho do CRM que tipa a guia (trg_marcar_guia_robo)
+    // só dispara no UPDATE que preenche guia_id. Resultado: guia nasce com o
+    // tipo default (psicoterapia) e uma sessão de ABA não pode consumi-la.
+    //
+    // Havia 28 jobs nessa situação, 6 deles com guia existente no CRM.
+    // Recupera o id pelo código da guia antes de desistir.
+    let guiaId: string | null = novaGuia?.id ?? null;
+
+    if (!guiaErr && !guiaId && resultado.numero_guia) {
+      const { data: recuperada } = await supabase
+        .from("guias")
+        .select("id")
+        .eq("codigo_guia", resultado.numero_guia)
+        .eq("paciente_id", job.paciente_id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      guiaId = recuperada?.id ?? null;
+
+      if (guiaId) {
+        console.log(`[${jobId}] guia_id recuperado por codigo_guia: ${guiaId}`);
+      } else {
+        console.error(
+          `[${jobId}] ⚠️ Guia ${resultado.numero_guia} ficou sem guia_id no job. ` +
+            `A guia NÃO será tipada pelo CRM e vai herdar o tipo default — ` +
+            `procedimento era ${job.procedimento_codigo} (${job.procedimento_categoria}).`
+        );
+      }
+    }
+
     // Status do job:
     //   negado             → guia gerada mas Unimed negou
     //   sucesso_em_analise → guia gerada mas portal indicou "Em estudo/análise"
@@ -463,7 +565,7 @@ async function atualizarJobComResultado(
       .from("unimed_aprovacao_jobs")
       .update({
         status: statusJob,
-        guia_id: novaGuia?.id ?? null,
+        guia_id: guiaId,
         numero_guia_unimed: resultado.numero_guia ?? null,
         senha_autorizacao: resultado.senha_autorizacao ?? null,
         situacao_unimed: resultado.situacao ?? null,

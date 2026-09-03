@@ -4,6 +4,43 @@
 
 ---
 
+## 03/09/2026
+
+### Fix: valor padrão silencioso deixou 673 guias com validade um mês curta
+**Arquivos:** `servidor-local/src/executor.ts`
+- Renovação criada nos **últimos 7 dias** de um mês pertence ao mês seguinte. O robô aplica essa regra desde 10/08 e devolve `mes_utilizacao` e `data_emissao_sgu`
+- O servidor tinha `resultado.mes_utilizacao || primeiroDiaDoMesAtual`. Em máquinas com robô desatualizado o campo não vinha, e o padrão jogava a guia para o **mês corrente** — validade um mês mais curta, sem nenhum aviso
+- Levantamento: das renovações criadas nos últimos 7 dias do mês depois de 10/08, **658 ficaram no mês errado e nenhuma no mês certo**. Somando todo o histórico, **673 guias** entre 29/06 e 31/08
+- Agora o servidor detecta a ausência do campo, **registra erro no console apontando a máquina desatualizada**, e calcula pelo mesmo critério do robô (`calcularCicloMensal`) em vez de assumir o mês atual
+- Dados corrigidos: 660 guias tiveram `mes_utilizacao` e `data_validade` recalculadas. As outras 13 são guias negadas, sem validade — nada a corrigir. Backup em `_backup_validade_20260903`
+- É o mesmo vício da verificação de guias: quando o dado não chega, inventar um plausível esconde a falha por meses
+
+
+### Fix: robô não iniciava em pasta com acento no caminho
+**Arquivos:** `servidor-local/src/executor.ts`, `servidor-local/src/executor-sessao.ts`, `servidor-local/src/verificador.ts`
+- O caminho do `tsx` era montado com `new URL(...).pathname`, que faz **percent-encoding**: numa pasta como `C:\Users\João\...` o caminho virava `Jo%C3%A3o`, que não existe
+- O robô morria antes de carregar, com `Cannot find module ...cli.mjs` e saída 1 — reportado como `ROBO_FALHOU`, sem pista da causa. **29 jobs falharam em sequência** por isso
+- Corrigido com `fileURLToPath()` nos três arquivos que disparam o robô
+- Só afeta máquinas cujo caminho tem caractere não-ASCII. Onde a pasta é `C:\Robo-Unimed` o robô sempre funcionou — foi por isso que o problema pareceu aleatório
+- O `verificador.ts` também deixou de usar `npx tsx` (que só funcionava se o tsx estivesse no cache do npx; a pasta do robô não o tem) e passou a usar `node` + o tsx do servidor, igual ao executor
+- Removido `shell: true` do verificador: era necessário para o `npx`, mas com o `node` direto o cmd reinterpreta aspas e quebra caminhos com espaço
+
+### Nota operacional: `ROBO_CAMINHO` corrompido por codificação
+- Um `.env` escrito à mão pelo Bloco de Notas gravou `ROBO_CAMINHO=C:\Users\Jo?o\...`, com o "ã" corrompido
+- A pasta não existia, e o Windows relata isso como `ENOENT` **no executável do Node** — o erro dizia "spawn node.exe ENOENT" com o Node instalado e funcionando
+- Ao criar `.env` à mão, salve em UTF-8. Melhor ainda: mantenha o robô num caminho sem acentos
+
+
+### Fix: job podia ficar sem `guia_id`, deixando a guia sem tipo de atendimento
+**Arquivos:** `servidor-local/src/executor.ts`
+- Contexto: o CRM passou a controlar guias por tipo de atendimento, e o gatilho `trg_marcar_guia_robo` grava `guias.tipo_procedimento` **no UPDATE que preenche `unimed_aprovacao_jobs.guia_id`**. Sem esse UPDATE a guia herda o tipo default (psicoterapia) e uma sessão de ABA, psicopedagogia ou neuro não pode consumi-la
+- O insert da guia usa `.select("id").maybeSingle()`, que pode voltar sem linha mesmo tendo gravado. Nesse caso o job recebia `guia_id: null` sem registrar erro nenhum
+- Auditoria encontrou **28 jobs** concluídos nessa situação (26/06 a 21/08), **6 deles com guia existente no CRM** — essas guias nunca passaram pelo gatilho
+- Agora, se o insert não devolve o id, o servidor recupera pelo `codigo_guia` + `paciente_id`. Se ainda assim não achar, grava erro no console dizendo qual procedimento ficou sem tipagem
+- Nenhuma alteração no fluxo do portal, no login, nos seletores ou na execução de sessão
+
+---
+
 ## 26/08/2026
 
 ### Feat: a guia executada passa a ser a escolhida no CRM, e fica registrada
