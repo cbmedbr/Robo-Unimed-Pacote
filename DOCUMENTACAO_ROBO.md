@@ -62,6 +62,31 @@ Antes de abrir o browser, valida:
 - `especialidade_pedido`: deve ser `"PSICOLOGIA"`
 - PDF: arquivo deve existir, extensão válida (.pdf/.jpg/.png/.doc/.xls), máximo 5 MB
 
+### Token repetido é recusado ANTES do portal (16/09/2026)
+
+A Unimed **aceita token repetido**. O CRM sempre recusou gravar token repetido
+em `agendamentos` (`check_token_execucao`), mas o robô executa no portal
+primeiro e grava depois — quando a gravação era recusada, o portal já tinha
+executado. Medição de 30 dias: 10 tokens disparados mais de uma vez, um disparo
+duplo da mesma sessão com dois sucessos no portal, 24 jobs `pendente` na fila
+com token já usado em outra sessão.
+
+Uma regra, três camadas — todas em `token_execucao_em_uso(token, sessão)` no
+CRM (migration 306), que devolve o motivo em texto ou NULL:
+
+1. **Gatilho `trg_job_robo_token`** (BEFORE INSERT em `unimed_execucao_jobs`):
+   o job não nasce com token fora do formato, igual a código de guia do
+   paciente, já gravado em outra sessão (manual ou robô) ou já em job
+   pendente/executando/sucesso de outra sessão; também recusa segundo job para
+   sessão com job pendente/executando (o disparo duplo) e sessão já executada.
+   O servidor devolve isso como **409** com a mensagem limpa (`index.ts`).
+2. **Tela do CRM** (`ExecucaoRoboModal`): valida pela mesma RPC **no
+   Confirmar**, esperando a resposta.
+3. **Servidor** (`executor-sessao.ts`): confere de novo logo antes de abrir o
+   portal; recusado → job `falhou` com `erro_codigo = TOKEN_REPETIDO`. Se a
+   validação falhar por rede/RPC, também não abre (`TOKEN_NAO_VALIDADO`) —
+   na dúvida, não executa.
+
 ### Etapa 1: Login (`login.ts`)
 - Navega para `https://rda.unimedsc.com.br/cmagnet/Login.do`
 - Seletores do campo usuário (em ordem): `input[name="cd_usuario"]`, `input[name="usuario"]`, `input[name="login"]`, `input[id="cd_usuario"]`, `input[type="text"]:visible`

@@ -173,6 +173,32 @@ export async function executarSessaoJob(
 ): Promise<void> {
   console.log(`[exec-${jobId}] Iniciando execução de sessão`);
 
+  // Última conferência do token ANTES de abrir o portal (migration 306 do
+  // CRM). O job só nasce se o token passou pelo gatilho, mas entre nascer e
+  // rodar o token pode ter sido usado por uma execução manual — e a Unimed
+  // aceita token repetido, então depois do portal não há volta. A regra é a
+  // mesma do gatilho e da tela (token_execucao_em_uso): uma regra, três
+  // camadas.
+  if (dados.qrcode_valor) {
+    const { data: motivo, error: errTok } = await supabase.rpc("token_execucao_em_uso", {
+      p_token: dados.qrcode_valor,
+      p_sessao_id: dados.sessao_id,
+    });
+    if (errTok) {
+      console.error(`[exec-${jobId}] Não conseguiu validar o token, não abre o portal:`, errTok.message);
+      await atualizarStatus(jobId, "falhou", {
+        erro_codigo: "TOKEN_NAO_VALIDADO",
+        erro_mensagem: `Não foi possível validar o token antes de abrir o portal: ${errTok.message}`,
+      });
+      return;
+    }
+    if (motivo) {
+      console.error(`[exec-${jobId}] Token recusado antes do portal: ${motivo}`);
+      await atualizarStatus(jobId, "falhou", { erro_codigo: "TOKEN_REPETIDO", erro_mensagem: String(motivo) });
+      return;
+    }
+  }
+
   // Atualizar status para executando
   await atualizarStatus(jobId, "executando");
 
