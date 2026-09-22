@@ -118,7 +118,8 @@ Antes de abrir o browser, valida:
   - Clica Localizar
   - Clica `a:has-text("CLINICA LUCIANO NOCETI")`
 - `#DM_CARATER_SOLIC` → valor `"1"` (Eletivo)
-- `#DS_INDIC_CLINICA` → texto da indicação clínica
+- `#DS_INDIC_CLINICA` → texto da indicação clínica (montado no servidor, `executor.ts`; campo tem
+  `maxlength="500"`)
 - `select[name="DM_TP_ATEND_SADT"]` → valor `"03"` (Outras Terapias)
 - `select[name="DM_TP_ACIDENTE"]` → valor `"9"` (Não acidente)
 - `select[name="FG_LIMINAR_JUDICIAL"]` → valor `"N"` ou primeira opção com "Não"
@@ -144,6 +145,11 @@ Antes de abrir o browser, valida:
 - Clica `#BtnAtualizar` para validar a linha
 - Aguarda descrição esperada (ex: "SESSAO DE PSICOTERAPIA")
 
+**A quantidade vem pronta do CRM e o robô não a recalcula.** Desde 22/09/2026 ela varia
+(5, 9, 13…) em vez de ser sempre 5: o CRM conta as sessões que exigem guia até o fim da
+validade, por (paciente, tipo de procedimento, psicólogo executante). Quem atende 2× por
+semana recebia autorização para metade das sessões que usava.
+
 ### Etapa 8: Anexo do pedido médico (`anexo.ts`)
 - Clica `#item_anexos_1` (ícone de anexo na linha do procedimento)
 - Faz polling por modal de anexo em todas as janelas (URL contendo "anexo"/"upload" + `input[type="file"]`)
@@ -167,7 +173,35 @@ Antes de abrir o browser, valida:
   4. `waitForFunction` com polling
 - **Detecção de situação:** NEGADA, EM_ANALISE, EM_EXECUCAO (default: EM_ANALISE)
 - **Captura de senha:** regex no HTML da tela de sucesso
+- **Captura da quantidade autorizada** (`lerQuantidades`) — ver abaixo
 - Salva `dump-sucesso.html` + `dump-sucesso.png`
+
+#### Quantas sessões a Unimed autorizou (`finalizar.ts` → `lerQuantidades`)
+
+A Unimed pode liberar **menos** sessões do que foi pedido. Enquanto o pedido era sempre 5
+isso quase não aparecia; com pedidos de 9–13 passa a ser provável, e gravar o pedido como
+se fosse o autorizado faz o CRM liberar sessão contra saldo que não existe na operadora.
+
+Duas formas de leitura, porque a tela varia:
+
+1. **Campos de formulário** — `input[name="QT_SOLIC_1"]` e `QT_AUTORIZADA_1`, como no fluxo
+   de execução.
+2. **Células da tabela**, quando a tela é somente leitura. A coluna é localizada pela
+   **posição do cabeçalho** "Qt. Autoriz." / "Qt. Solic.", nunca por índice fixo — a tabela
+   do SGU tem colunas variáveis (`Tabela | Código | Descrição | Un. Med. | Qt. Solic. |
+   Qt. Autoriz. | Fabricante`).
+
+Devolve `null` quando não encontra — esperado em guia "em análise", que ainda não tem
+quantidade autorizada. Nesse caso o servidor grava a quantidade **pedida**, e o cron de
+verificação revisita a guia depois. A ausência é registrada em log: se passar a acontecer
+sempre, o CRM volta silenciosamente a gravar o pedido como autorizado.
+
+No servidor (`executor.ts`), quando o autorizado é menor que o pedido:
+
+- `guias.sessoes_autorizadas` recebe o **autorizado**;
+- `guias.observacoes` e `unimed_aprovacao_jobs.erro_mensagem` registram a diferença (o job
+  continua como `sucesso` — a guia existe, só é menor);
+- o console avisa com `⚠️ AUTORIZAÇÃO PARCIAL`.
 
 ---
 
@@ -464,6 +498,32 @@ Layout da linha (confirmado em 21/08/2026 contra guias reais):
 1. CRM cria linha em `unimed_aprovacao_jobs` com `status='pendente'`
 2. CRM chama `POST localhost:9876/executar` com `{ jobIds: [id1, id2, ...] }`
 3. Servidor valida, responde 202, executa sequencialmente (3s entre jobs)
+
+**Dois jobs do mesmo paciente no mesmo lote são suportados** — tipos de procedimento
+diferentes (psicoterapia e ABA) ou psicólogos diferentes. Nada agrupa ou descarta job por
+`paciente_id`, e cada job cria a **sua** guia. A única busca de guia existente
+(`executor.ts`, recuperação de `guia_id`) casa por `codigo_guia` + `paciente_id`, e o
+`codigo_guia` é único por autorização — não há como uma guia de ABA ser reaproveitada para
+psicoterapia.
+
+#### Campos do job usados na indicação clínica (migration 314, 22/09/2026)
+
+| Coluna | Exemplo | Uso |
+|---|---|---|
+| `sessoes_por_semana` | `2` | dias distintos da semana, por (paciente, tipo, psicólogo) |
+| `dias_semana` | `"qua, sex"` | entra no texto |
+| `cobertura_ate` | `2026-10-07` | até quando a guia precisa cobrir |
+| `psicologo_executante_id` | uuid | o psicólogo **da linha** |
+
+Com `sessoes_por_semana > 1`, o texto ganha a justificativa da frequência:
+
+```
+CID F41.1. Encaminhamento para psicoterapia. Atendimento 2x por semana (qua, sex).
+Quantidade solicitada: 9 sessões, cobertura até 07/10/2026.
+```
+
+Jobs anteriores à migration têm esses campos `null` e usam o texto antigo — sem inventar
+frequência que não foi calculada. O prefixo `CID ` é obrigatório em ambos (`validacao.ts`).
 
 ### Execução de sessão
 1. CRM chama `POST localhost:9876/executar-sessao` com dados completos

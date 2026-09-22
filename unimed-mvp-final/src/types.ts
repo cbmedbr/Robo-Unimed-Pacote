@@ -107,6 +107,10 @@ export interface ResultadoSucesso {
   screenshot_comprovante_path: string | null;
   senha_autorizacao?: string | null;
   situacao: "APROVADO" | "EM_ANALISE" | "NEGADA";
+  /** Qt. Solic. lida na tela do portal após gerar a guia. `null` se não estava na tela. */
+  quantidade_solicitada?: number | null;
+  /** Qt. Autoriz. lida na tela — o que a Unimed de fato liberou. `null` em guia "em análise". */
+  quantidade_autorizada?: number | null;
   duracao_ms: number;
 }
 

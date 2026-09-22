@@ -73,7 +73,23 @@ export async function executarAutorizacao(
       screenshot_comprovante_path,
       senha_autorizacao,
       situacao,
+      quantidade_solicitada,
+      quantidade_autorizada,
     } = await finalizarGuia(pageFormulario, config, input);
+
+    if (
+      quantidade_autorizada !== null &&
+      quantidade_autorizada < input.procedimento.quantidade_solicitada
+    ) {
+      logger.warn(
+        {
+          pedido: input.procedimento.quantidade_solicitada,
+          autorizado: quantidade_autorizada,
+          numero_guia,
+        },
+        "AUTORIZAÇÃO PARCIAL: a Unimed liberou menos sessões do que o pedido"
+      );
+    }
 
     const duracao = Date.now() - inicio;
     logger.info(
@@ -110,6 +126,8 @@ export async function executarAutorizacao(
       screenshot_comprovante_path,
       senha_autorizacao,
       situacao,
+      quantidade_solicitada,
+      quantidade_autorizada,
       duracao_ms: duracao,
     };
   } catch (err) {

@@ -14,6 +14,10 @@ export async function finalizarGuia(
   numero_guia: string;
   data_autorizacao: string;
   screenshot_comprovante_path: string | null;
+  senha_autorizacao: string | null;
+  situacao: "APROVADO" | "EM_ANALISE" | "NEGADA";
+  quantidade_solicitada: number | null;
+  quantidade_autorizada: number | null;
 }> {
   logger.info("iniciando finalização da guia");
 
@@ -318,13 +322,97 @@ export async function finalizarGuia(
 
   const dataAutorizacao = new Date().toISOString().split("T")[0];
 
+  // Quanto a Unimed REALMENTE autorizou — pode ser menos que o pedido
+  const { solicitada, autorizada } = await lerQuantidades(page);
+
   return {
     numero_guia: numeroGuia,
     data_autorizacao: dataAutorizacao,
     screenshot_comprovante_path: screenshotPath,
     senha_autorizacao: senhaAutorizacao,
     situacao: situacaoGuia,
+    quantidade_solicitada: solicitada,
+    quantidade_autorizada: autorizada,
   };
+}
+
+/**
+ * Lê "Qt. Solic." e "Qt. Autoriz." da tela que o portal mostra depois de gerar
+ * a guia. A Unimed pode autorizar menos do que foi pedido, e com pedidos de
+ * 9-13 sessões isso deixa de ser raro — gravar o pedido como se fosse o
+ * autorizado faria o CRM liberar sessão contra saldo inexistente.
+ *
+ * Duas formas de leitura, porque a tela varia:
+ *   1. campos de formulário (`QT_AUTORIZADA_1`), como no fluxo de execução;
+ *   2. células da tabela de procedimentos, quando a tela é somente leitura —
+ *      aí a quantidade vem em `<td>`, localizada pela posição do cabeçalho
+ *      "Qt. Autoriz.", não por índice fixo (a tabela tem colunas variáveis).
+ *
+ * Devolve `null` quando não encontra. Isso é esperado em guia "em análise",
+ * que ainda não tem quantidade autorizada — quem chama decide o que fazer.
+ */
+export async function lerQuantidades(
+  page: Page
+): Promise<{ solicitada: number | null; autorizada: number | null }> {
+  const numero = (v: string | null | undefined): number | null => {
+    if (!v) return null;
+    const n = parseInt(String(v).replace(/\D/g, ""), 10);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  // 1. Campos de formulário
+  try {
+    const solic = numero(await page.inputValue('input[name="QT_SOLIC_1"]').catch(() => null));
+    const autoriz = numero(await page.inputValue('input[name="QT_AUTORIZADA_1"]').catch(() => null));
+    if (autoriz !== null || solic !== null) {
+      logger.info({ solicitada: solic, autorizada: autoriz, via: "input" }, "quantidades lidas");
+      return { solicitada: solic, autorizada: autoriz };
+    }
+  } catch {
+    // segue para a tabela
+  }
+
+  // 2. Células da tabela, pela posição do cabeçalho
+  try {
+    const achado = await page.evaluate(() => {
+      const limpar = (s: string) => s.replace(/ /g, " ").replace(/\s+/g, " ").trim();
+      for (const tabela of Array.from(document.querySelectorAll("table"))) {
+        const linhas = Array.from(tabela.querySelectorAll("tr"));
+        const iCab = linhas.findIndex((tr) =>
+          Array.from(tr.querySelectorAll("td,th")).some((c) => /Qt\.?\s*Autoriz/i.test(limpar(c.textContent || "")))
+        );
+        if (iCab < 0) continue;
+
+        const cabecalho = Array.from(linhas[iCab].querySelectorAll("td,th")).map((c) => limpar(c.textContent || ""));
+        const colAutoriz = cabecalho.findIndex((t) => /Qt\.?\s*Autoriz/i.test(t));
+        const colSolic = cabecalho.findIndex((t) => /Qt\.?\s*Solic/i.test(t));
+
+        for (const tr of linhas.slice(iCab + 1)) {
+          const celulas = Array.from(tr.querySelectorAll("td")).map((c) => limpar(c.textContent || ""));
+          if (celulas.length !== cabecalho.length) continue;
+          const autoriz = colAutoriz >= 0 ? celulas[colAutoriz] : "";
+          const solic = colSolic >= 0 ? celulas[colSolic] : "";
+          if (/^\d+$/.test(autoriz) || /^\d+$/.test(solic)) {
+            return { solicitada: solic, autorizada: autoriz };
+          }
+        }
+      }
+      return null;
+    });
+
+    if (achado) {
+      const r = { solicitada: numero(achado.solicitada), autorizada: numero(achado.autorizada) };
+      logger.info({ ...r, via: "tabela" }, "quantidades lidas");
+      return r;
+    }
+  } catch (err) {
+    logger.warn({ err: (err as Error).message }, "falha ao ler quantidades na tabela");
+  }
+
+  // Não achar não é erro, mas precisa aparecer: se passar a acontecer sempre,
+  // o CRM volta a gravar o pedido como se fosse o autorizado.
+  logger.warn("não consegui ler Qt. Autoriz. na tela — o servidor vai usar a quantidade solicitada");
+  return { solicitada: null, autorizada: null };
 }
 
 async function garantirProfissionalExecutante(page: Page, config: Config, input: InputAutorizacao): Promise<void> {

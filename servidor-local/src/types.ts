@@ -17,10 +17,21 @@ export interface UnimedJob {
   cid_snapshot: string;
   procedimento_codigo: "50000470" | "2250005103" | "2250005278" | "2250005367";
   procedimento_categoria?: "tipico" | "atipico" | "psicopedagogia" | "avaliacao_neuro" | null;
+  /** Quantidade a digitar em NR_QTD_1. Desde 22/09/2026 varia (5, 9, 13…) — o CRM calcula. */
   procedimento_quantidade: number;
   pedido_medico_path_snapshot: string;
   psicologo_executante_nome: string | null;
   is_primeira_guia: boolean;
+
+  // Frequência calculada pelo CRM (migration 314). `null` nos jobs anteriores a 22/09/2026.
+  /** Dias distintos da semana em que o paciente atende neste tipo, com este psicólogo. */
+  sessoes_por_semana: number | null;
+  /** Os dias, abreviados. Ex: "qua, sex". */
+  dias_semana: string | null;
+  /** Até quando a guia precisa cobrir. */
+  cobertura_ate: string | null;
+  /** O psicólogo DA LINHA — `psicologo_executante_nome` sozinho errava com dois psicólogos. */
+  psicologo_executante_id: string | null;
 
   status: "pendente" | "executando" | "sucesso" | "falhou" | "cancelado";
   tentativa: number;
@@ -32,6 +43,10 @@ export interface ResultadoRobo {
   numero_guia?: string;
   senha_autorizacao?: string;
   situacao?: "APROVADO" | "EM_ANALISE" | "NEGADA";
+  /** Qt. Solic. lida no portal após gerar a guia. */
+  quantidade_solicitada?: number | null;
+  /** Qt. Autoriz. lida no portal — o que a Unimed liberou de fato. */
+  quantidade_autorizada?: number | null;
   data_emissao_sgu?: string;
   mes_utilizacao?: string;
   comprovante_path?: string;

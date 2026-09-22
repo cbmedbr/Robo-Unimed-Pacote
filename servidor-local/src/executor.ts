@@ -81,8 +81,25 @@ async function jobParaInputRobo(job: UnimedJob): Promise<{
   const especialidade = "PSICOLOGIA";
 
   // 6. Indicação clínica — texto enviado ao portal Unimed
-  // DEVE começar com "CID " (validação do robô exige esse prefixo)
-  const indicacaoClinica = `CID ${job.cid_snapshot}. Encaminhamento para psicoterapia. Quantidade solicitada: ${job.procedimento_quantidade} sessões.`;
+  //
+  // DEVE começar com "CID " — a validação do robô exige esse prefixo.
+  //
+  // Desde 22/09/2026 o CRM calcula a quantidade em vez de mandar sempre 5:
+  // quem atende 2x por semana recebia autorização para metade das sessões que
+  // usa. Quando a frequência é maior que 1x, ela entra no texto — é o que
+  // sustenta um pedido de 9 ou 13 sessões diante da operadora.
+  //
+  // Jobs anteriores à migration 314 vêm com esses campos nulos e usam o texto
+  // antigo, sem inventar frequência que não foi calculada.
+  const temFrequencia =
+    (job.sessoes_por_semana ?? 0) > 1 && !!job.dias_semana && !!job.cobertura_ate;
+
+  const indicacaoClinica = temFrequencia
+    ? `CID ${job.cid_snapshot}. Encaminhamento para psicoterapia. ` +
+      `Atendimento ${job.sessoes_por_semana}x por semana (${job.dias_semana}). ` +
+      `Quantidade solicitada: ${job.procedimento_quantidade} sessões, ` +
+      `cobertura até ${formatarDataBR(job.cobertura_ate!)}.`
+    : `CID ${job.cid_snapshot}. Encaminhamento para psicoterapia. Quantidade solicitada: ${job.procedimento_quantidade} sessões.`;
 
   // 7. Normalizar CRM do médico — o OCR pode extrair como "12/23929" (código
   // numérico da UF + barra + número). Mapa de códigos numéricos → UF:
@@ -228,6 +245,18 @@ function calcularCicloMensal(isPrimeiraGuia: boolean): {
 
   const primeiroDia = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
   return { dataEmissao: iso(primeiroDia), mesUtilizacao: iso(primeiroDia) };
+}
+
+/**
+ * "2026-10-07" → "07/10/2026".
+ *
+ * Fatia a string em vez de usar `new Date()`: a data vem como dia de
+ * calendário e `new Date("2026-10-07")` é interpretada como UTC, virando 06/10
+ * no fuso de Brasília. Foi assim que sessões já foram gravadas no dia errado.
+ */
+function formatarDataBR(iso: string): string {
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
 }
 
 async function buscarTelefonePaciente(pacienteId: string): Promise<string> {
@@ -415,6 +444,8 @@ function rodarSubprocesso(jobId: string, inputPath: string): Promise<ResultadoRo
             senha_autorizacao: parsed.senha_autorizacao ?? undefined,
             situacao: parsed.situacao ?? "APROVADO",
             comprovante_path: parsed.screenshot_comprovante_path ?? undefined,
+            quantidade_solicitada: parsed.quantidade_solicitada ?? null,
+            quantidade_autorizada: parsed.quantidade_autorizada ?? null,
             duracao_ms: parsed.duracao_ms ?? duracao,
           });
         } else {
@@ -484,6 +515,34 @@ async function atualizarJobComResultado(
         ? "em_analise"
         : "ativa";
 
+    // Sessões da guia: o que a Unimed AUTORIZOU, não o que pedimos.
+    //
+    // Enquanto o pedido era sempre 5, autorização parcial quase não aparecia.
+    // Com pedidos de 9-13 ela fica provável, e uma guia inflada faz o CRM
+    // liberar sessão contra saldo que não existe na operadora.
+    //
+    // Sem leitura (guia em análise, por exemplo) cai para o pedido — é o que
+    // se sabe no momento, e o cron de verificação revisita a guia depois.
+    const autorizadoPeloPortal =
+      typeof resultado.quantidade_autorizada === "number" && resultado.quantidade_autorizada > 0
+        ? resultado.quantidade_autorizada
+        : null;
+
+    const sessoesAutorizadas = autorizadoPeloPortal ?? job.procedimento_quantidade;
+    const autorizacaoParcial = autorizadoPeloPortal !== null
+      && autorizadoPeloPortal < job.procedimento_quantidade;
+
+    if (autorizacaoParcial) {
+      console.warn(
+        `[${jobId}] ⚠️ AUTORIZAÇÃO PARCIAL: pedimos ${job.procedimento_quantidade} sessões, ` +
+          `a Unimed liberou ${autorizadoPeloPortal}. Guia ${resultado.numero_guia}.`
+      );
+    } else if (autorizadoPeloPortal === null && !negada) {
+      console.log(
+        `[${jobId}] Quantidade autorizada não veio na tela — gravando o pedido (${job.procedimento_quantidade}).`
+      );
+    }
+
     // data_emissao = data que foi preenchida no SGU (dia 1 ou hoje se últimos 7 dias)
     // mes_utilizacao = mês para o qual a guia vale (ex: 2026-08-01)
     //
@@ -536,13 +595,21 @@ async function atualizarJobComResultado(
         paciente_id: job.paciente_id,
         medico_id: job.medico_id_snapshot,
         plano_saude_id: job.plano_saude_id_snapshot,
-        sessoes_autorizadas: job.procedimento_quantidade,
+        sessoes_autorizadas: sessoesAutorizadas,
         sessoes_executadas: 0,
         data_emissao: dataEmissao,
         mes_utilizacao: mesUtilizacao,
         ...(dataValidade ? { data_validade: dataValidade } : {}),
         status: statusGuia,
-        ...(negada ? { observacoes: "Guia negada automaticamente pelo portal Unimed" } : {}),
+        ...(negada
+          ? { observacoes: "Guia negada automaticamente pelo portal Unimed" }
+          : autorizacaoParcial
+            ? {
+                observacoes:
+                  `Autorização parcial: pedimos ${job.procedimento_quantidade} sessões, ` +
+                  `a Unimed liberou ${autorizadoPeloPortal}.`,
+              }
+            : {}),
       })
       .select("id")
       .maybeSingle();
@@ -618,6 +685,15 @@ async function atualizarJobComResultado(
         senha_autorizacao: resultado.senha_autorizacao ?? null,
         situacao_unimed: resultado.situacao ?? null,
         comprovante_path: resultado.comprovante_path ?? null,
+        // Job segue como sucesso — a guia existe. A mensagem é para a recepção
+        // ver na tela que o saldo é menor do que o pedido.
+        ...(autorizacaoParcial
+          ? {
+              erro_mensagem:
+                `Autorização parcial: pedimos ${job.procedimento_quantidade} sessões, ` +
+                `a Unimed liberou ${autorizadoPeloPortal}. Guia criada com o autorizado.`,
+            }
+          : {}),
         concluido_em: new Date().toISOString(),
         duracao_ms: resultado.duracao_ms,
       })
