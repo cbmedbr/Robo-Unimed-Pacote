@@ -120,19 +120,26 @@
 
 ### 3.7 Procedimentos solicitados
 20. Informar o **código do procedimento** conforme o pedido médico.
-21. Solicitar **5 sessões por autorização**.
+21. **Quantidade de sessões: a que o CRM calcular.** Até 22/09/2026 eram sempre 5, e quem atende 2×
+    por semana recebia autorização para metade das sessões que usa. Agora o CRM conta as sessões que
+    exigem guia entre hoje e o fim da validade, por **(paciente, tipo de procedimento, psicólogo
+    executante)** — pode dar 5, 9, 13. O robô digita o que vier e **não recalcula nada**.
+22. Quando a frequência é maior que 1× por semana, a **indicação clínica** informa isso
+    (`Atendimento 2x por semana (qua, sex)`) — é o que sustenta o número maior diante da operadora.
 
 ### 3.8 Dados do contratado executante
-22. **Data do atendimento:** alterar para a data retroativa correspondente ao atendimento.
-23. **Nome do profissional executante:** selecionar o **psicólogo que efetivamente realizou o
+23. **Data do atendimento:** alterar para a data retroativa correspondente ao atendimento.
+24. **Nome do profissional executante:** selecionar o **psicólogo que efetivamente realizou o
     atendimento**, conforme o agendamento do paciente no CRM.
 
 ### 3.9 Anexar documentos
-24. Clicar no ícone de **Anexo** → **Escolher arquivo** → anexar o **pedido médico** → **Anexar**.
-25. Após a confirmação do anexo, clicar em **Finalizar**.
+25. Clicar no ícone de **Anexo** → **Escolher arquivo** → anexar o **pedido médico** → **Anexar**.
+26. Após a confirmação do anexo, clicar em **Finalizar**.
 
 ### 3.10 Geração da guia
-26. Após finalizar a solicitação, clicar em **Gerar guia** para concluir a autorização retroativa.
+27. Após finalizar a solicitação, clicar em **Gerar guia** para concluir a autorização retroativa.
+28. **Conferir quantas sessões a Unimed autorizou.** Ela pode liberar menos do que foi pedido, e é o
+    **autorizado** que vale — é ele que o CRM grava como saldo da guia.
 
 ---
 
@@ -171,9 +178,10 @@ mantido.** Não são bugs nem dívida técnica — não "corrija" nenhum deles s
 2. **Significado de "retroativa".** Retroativo é exatamente **forçar a data para o dia 1º do mês**, na
    renovação mensal (`autorizacao.ts`, `finalizar.ts` → `ehRetroativo`). É esse o comportamento
    desejado — não existe nem é preciso existir entrada para uma data retroativa arbitrária.
-3. **Quantidade de sessões.** O SOP fixa 5 sessões por autorização; o robô aceita de 1 a 60 conforme o
-   que vier do CRM (`validacao.ts`). **Manter como está** — a quantidade é decidida no CRM, sem trava
-   em 5 no robô.
+3. **Quantidade de sessões.** ~~O SOP fixa 5 sessões por autorização~~ — **resolvido em 22/09/2026**:
+   o CRM passou a calcular a quantidade pela frequência do paciente, e o SOP (passo 21) foi
+   atualizado. O robô continua aceitando de 1 a 60 (`validacao.ts`) e **não recalcula nada** — a
+   decisão é do CRM, como sempre foi na prática.
 4. **E-mail e telefone.** O SOP manda preencher e-mail `atendimento@lucianonoceti.com.br` e o telefone
    do paciente. O robô **deixa o celular em branco** e só preenche e-mail se for um e-mail real do
    paciente, porque o portal rejeita a guia quando telefone/e-mail são do prestador

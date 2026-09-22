@@ -4,6 +4,55 @@
 
 ---
 
+## 22/09/2026
+
+### Feat: quantidade por frequência do paciente, e guia gravada com o AUTORIZADO
+**Arquivos:** `servidor-local/src/executor.ts`, `servidor-local/src/types.ts`, `unimed-mvp-final/src/finalizar.ts`, `unimed-mvp-final/src/autorizacao.ts`, `unimed-mvp-final/src/types.ts`, `FLUXOS_NEGOCIO.md`, `DOCUMENTACAO_ROBO.md`
+
+O CRM passou a calcular quantas sessões pedir em vez de mandar sempre 5 (migration 314).
+Quem atende 2× por semana recebia autorização para metade das sessões que usa.
+
+**1. Indicação clínica com a frequência.** Quando `sessoes_por_semana > 1`, o texto passa a
+justificar o número maior diante da operadora:
+
+```
+CID F41.1. Encaminhamento para psicoterapia. Atendimento 2x por semana (qua, sex).
+Quantidade solicitada: 9 sessões, cobertura até 07/10/2026.
+```
+
+Jobs anteriores à migration vêm com os campos `null` e mantêm o texto antigo. O prefixo
+`CID ` (exigido por `validacao.ts`) é preservado nos dois casos. O campo do portal tem
+`maxlength="500"` e o texto novo usa ~141 caracteres — sem risco de truncar.
+
+**2. `guias.sessoes_autorizadas` passa a receber o que a Unimed AUTORIZOU.** Antes gravava
+`job.procedimento_quantidade`, assumindo concessão integral. Com pedidos de 9–13 a
+autorização parcial fica provável, e uma guia inflada faz o CRM liberar sessão contra saldo
+que não existe na operadora.
+
+- Nova função `lerQuantidades()` em `finalizar.ts`, com duas estratégias: campos de
+  formulário (`QT_AUTORIZADA_1`) e, quando a tela é somente leitura, as células da tabela
+  localizadas pela **posição do cabeçalho** "Qt. Autoriz." — nunca por índice fixo, porque a
+  tabela do SGU tem colunas variáveis
+- Quando não encontra (guia "em análise"), devolve `null` e o servidor grava a quantidade
+  pedida — **mas registra em log**, para essa ausência não virar um silêncio permanente
+- Autorização parcial: grava o autorizado, anota a diferença em `guias.observacoes` e em
+  `unimed_aprovacao_jobs.erro_mensagem`, e avisa no console. O job segue como `sucesso` — a
+  guia existe, só é menor
+
+**3. Dois jobs do mesmo paciente no mesmo lote:** verificado, já funcionava. Nada agrupa por
+`paciente_id`, cada job cria a sua guia, e a recuperação de `guia_id` casa por `codigo_guia`
+(único por autorização) + `paciente_id`. Nenhuma alteração necessária.
+
+De quebra, o tipo de retorno de `finalizarGuia` foi corrigido — ele já devolvia
+`senha_autorizacao` e `situacao` sem declará-los, o que gerava 3 dos erros de tipo
+pré-existentes do robô. Restam 9, todos anteriores e fora deste caminho.
+
+`lerQuantidades` testada contra DOM real (Playwright) em 5 casos: campos de formulário,
+tabela somente leitura com autorização parcial, tabela com colunas em ordem diferente, tela
+sem quantidade e tabela de outro assunto que não pode confundir.
+
+---
+
 ## 16/09/2026
 
 ### Fix: token repetido é recusado antes de abrir o portal
@@ -11,6 +60,8 @@
 - A Unimed aceita token repetido, e o robô executava no portal antes de o CRM recusar a gravação. Em 30 dias: 10 tokens disparados mais de uma vez, um disparo duplo da mesma sessão com dois sucessos no portal (Rodrigo Spinato, 01/09), 24 jobs `pendente` com token já usado
 - Agora o job só nasce se passar pelo gatilho `trg_job_robo_token` do CRM (migration 306); o servidor devolve a recusa como **409** com a mensagem limpa
 - O executor confere o token de novo pela RPC `token_execucao_em_uso` **logo antes de abrir o portal**; recusado → `falhou` / `TOKEN_REPETIDO`. Sem resposta da RPC também não abre (`TOKEN_NAO_VALIDADO`) — na dúvida, não executa
+
+---
 
 ## 03/09/2026
 
