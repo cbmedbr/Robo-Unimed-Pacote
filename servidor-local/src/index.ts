@@ -206,6 +206,14 @@ app.post("/executar-sessao", async (req, res) => {
     .single();
 
   if (error || !job) {
+    // P0001 é o gatilho trg_job_robo_token do CRM (migration 306) recusando o
+    // job: token repetido, formato inválido, código de guia, ou já há execução
+    // em andamento para a sessão. A mensagem já vem pronta para a tela — vai
+    // limpa, como 409, não embrulhada num "Erro ao criar job".
+    if (error?.code === "P0001") {
+      console.warn(`[executar-sessao] recusado pelo CRM: ${error.message}`);
+      return res.status(409).json({ erro: error.message });
+    }
     return res.status(500).json({ erro: `Erro ao criar job: ${error?.message}` });
   }
 

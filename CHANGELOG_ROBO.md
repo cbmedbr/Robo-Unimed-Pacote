@@ -4,6 +4,14 @@
 
 ---
 
+## 16/09/2026
+
+### Fix: token repetido é recusado antes de abrir o portal
+**Arquivos:** `servidor-local/src/executor-sessao.ts`, `servidor-local/src/index.ts`
+- A Unimed aceita token repetido, e o robô executava no portal antes de o CRM recusar a gravação. Em 30 dias: 10 tokens disparados mais de uma vez, um disparo duplo da mesma sessão com dois sucessos no portal (Rodrigo Spinato, 01/09), 24 jobs `pendente` com token já usado
+- Agora o job só nasce se passar pelo gatilho `trg_job_robo_token` do CRM (migration 306); o servidor devolve a recusa como **409** com a mensagem limpa
+- O executor confere o token de novo pela RPC `token_execucao_em_uso` **logo antes de abrir o portal**; recusado → `falhou` / `TOKEN_REPETIDO`. Sem resposta da RPC também não abre (`TOKEN_NAO_VALIDADO`) — na dúvida, não executa
+
 ## 03/09/2026
 
 ### Feat: comprovante da guia passa a ser anexado no CRM
