@@ -2,6 +2,68 @@ import { Page } from "playwright";
 import { Config, InputAutorizacao } from "./types";
 import { logger } from "./utils/logger";
 import { capturarScreenshot } from "./utils/screenshot";
+import { preencherMedicoSolicitante } from "./medico";
+
+/** Seletores do campo "Nome do profissional solicitante", na ordem em que o SGU já apareceu. */
+const SELETORES_SOLICITANTE = [
+  "#NM_PROFISSIONAL",
+  'input[name="NM_PROFISSIONAL"]',
+  "#NM_SOLIC",
+  'input[name="NM_SOLIC"]',
+];
+
+/** Lê o nome do solicitante que está no formulário, "" se o campo estiver vazio ou ausente. */
+export async function lerSolicitante(page: Page): Promise<string> {
+  for (const sel of SELETORES_SOLICITANTE) {
+    const valor = await page.locator(sel).first().inputValue().catch(() => null);
+    if (valor !== null) return valor.trim();
+  }
+  return "";
+}
+
+/**
+ * Garante que o médico solicitante está preenchido antes de finalizar.
+ *
+ * Se o SGU apagou o campo (acontece ao clicar Atualizar no procedimento),
+ * refaz a busca do médico. Se ainda assim ficar vazio, para aqui com uma
+ * mensagem legível em vez de deixar o portal recusar com HTML no meio do erro.
+ */
+async function garantirSolicitantePreenchido(
+  page: Page,
+  config: Config,
+  input: InputAutorizacao
+): Promise<void> {
+  const antes = await lerSolicitante(page);
+
+  if (antes) {
+    logger.info({ solicitante: antes }, "campo solicitante OK");
+    return;
+  }
+
+  logger.warn(
+    { medico: input.medico_solicitante.nome },
+    "campo do médico solicitante foi apagado pelo SGU — re-preenchendo antes de finalizar"
+  );
+
+  try {
+    await preencherMedicoSolicitante(page, input, config);
+  } catch (err) {
+    throw new Error(
+      `FINALIZACAO_FALHOU: o SGU apagou o médico solicitante e não consegui re-preenchê-lo: ${(err as Error).message}`
+    );
+  }
+
+  const depois = await lerSolicitante(page);
+  if (!depois) {
+    throw new Error(
+      "FINALIZACAO_FALHOU: o SGU apagou o médico solicitante e o campo continuou vazio após " +
+        `re-preencher (${input.medico_solicitante.nome}, CRM ${input.medico_solicitante.numero_crm}). ` +
+        "A guia NÃO foi salva — sem isto o portal recusaria a finalização."
+    );
+  }
+
+  logger.info({ solicitante: depois }, "médico solicitante re-preenchido com sucesso");
+}
 
 /**
  * Finaliza a autorização: clica Finalizar > Gerar autorização > captura número.
@@ -21,15 +83,19 @@ export async function finalizarGuia(
 }> {
   logger.info("iniciando finalização da guia");
 
-  // Verifica se o campo solicitante foi limpo pelo SGU (acontece após Atualizar procedimento)
-  try {
-    const solicitanteValor = await page.locator('#NM_PROFISSIONAL').inputValue().catch(() => "");
-    if (!solicitanteValor.trim()) {
-      logger.warn("campo NM_PROFISSIONAL foi limpo pelo SGU — precisaria re-preencher o médico");
-    } else {
-      logger.info({ solicitante: solicitanteValor }, "campo solicitante OK");
-    }
-  } catch {}
+  // O SGU limpa o "Nome do profissional solicitante" ao clicar em Atualizar na
+  // linha do procedimento (etapa 7), DEPOIS de o médico já ter sido preenchido
+  // na etapa 6. O portal então recusa a finalização com "O valor do campo Nome
+  // do profissional solicitante é obrigatório" e a guia não é salva.
+  //
+  // Isto aqui só avisava ("precisaria re-preencher o médico") e seguia para o
+  // clique em Finalizar, ou seja: detectava a falha e ia em frente assim mesmo.
+  // Era a causa do FINALIZACAO_FALHOU, o erro mais frequente do robô.
+  //
+  // Agora re-preenche de fato. Não é mudança de sequência do SOP — o médico
+  // continua sendo preenchido na etapa 6; isto é o conserto de um campo que o
+  // portal apagou sozinho depois.
+  await garantirSolicitantePreenchido(page, config, input);
 
   // Garante profissional executante (psicólogo do paciente ou Luciano como default)
   await garantirProfissionalExecutante(page, config, input);

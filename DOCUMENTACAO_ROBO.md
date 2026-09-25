@@ -189,6 +189,12 @@ semana recebia autorização para metade das sessões que usava.
 - Aguarda `#Botao_Finalizar` ficar visível (fica oculto até selecionar executante)
 
 ### Etapa 10: Finalização (`finalizar.ts`)
+- **Antes de tudo, `garantirSolicitantePreenchido()`** — o SGU apaga o "Nome do profissional
+  solicitante" quando se clica Atualizar na linha do procedimento (etapa 7), depois de o médico já
+  ter sido preenchido na etapa 6. Com o campo vazio o portal recusa a finalização e a guia não é
+  salva. A função lê `#NM_PROFISSIONAL` (com fallback para `NM_SOLIC`) e, se estiver vazio, chama
+  `preencherMedicoSolicitante()` de novo. Se mesmo assim ficar vazio, lança `FINALIZACAO_FALHOU`
+  com mensagem legível em vez de deixar o portal responder com HTML no meio do erro
 - Clica `#Botao_Finalizar` ou `input[name="Botao_Finalizar"]` ou `input[value="Finalizar"]`
 - **Detecção de erros:** busca no HTML padrões de erro de validação
 - **Captura do número da guia** (4 estratégias em ordem):
@@ -569,7 +575,7 @@ frequência que não foi calculada. O prefixo `CID ` é obrigatório em ambos (`
 
 ## 8. Problemas conhecidos e workarounds
 
-1. **Campo `NM_PROFISSIONAL` limpo pelo portal** — Após clicar "Atualizar procedimento", o SGU pode limpar o campo do médico solicitante. O robô loga warning mas não consegue re-preencher.
+1. **Campo `NM_PROFISSIONAL` limpo pelo portal** — Após clicar "Atualizar procedimento", o SGU limpa o campo do médico solicitante. **Resolvido em 25/09/2026:** o robô re-preenche antes de finalizar (`garantirSolicitantePreenchido`). Antes disso ele apenas logava um warning e clicava em Finalizar mesmo assim, o que fazia o portal recusar — era a causa do `FINALIZACAO_FALHOU`, o erro mais frequente do robô (312 ocorrências entre 25/05 e 02/09).
 
 2. **Seleção de médico por nome é frágil** — Se o nome no SGU difere do CRM (iniciais, prefixo DR.), o robô tenta 5 estratégias de fallback. Último recurso: primeiro link "Pessoa Física" na tabela.
 

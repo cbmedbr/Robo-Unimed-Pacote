@@ -4,6 +4,39 @@
 
 ---
 
+## 25/09/2026
+
+### Fix: `FINALIZACAO_FALHOU` — o robô detectava o campo do médico vazio e finalizava mesmo assim
+**Arquivos:** `unimed-mvp-final/src/finalizar.ts`, `DOCUMENTACAO_ROBO.md`
+
+O SGU **apaga** o "Nome do profissional solicitante" quando se clica Atualizar na linha do
+procedimento (etapa 7) — depois de o médico já ter sido preenchido na etapa 6. Com o campo
+vazio o portal recusa a finalização (`O valor do campo Nome do profissional solicitante é
+obrigatório`) e a guia não é salva.
+
+O robô já detectava isso e logava `campo NM_PROFISSIONAL foi limpo pelo SGU — precisaria
+re-preencher o médico`. E então clicava em Finalizar assim mesmo. Ou seja: reconhecia a
+falha e seguia para ela.
+
+Era a causa do erro mais frequente do robô — **312 `FINALIZACAO_FALHOU` entre 25/05 e
+02/09**, mapeados na investigação de 03/09 e nunca atacados até agora.
+
+Agora `garantirSolicitantePreenchido()` roda antes de finalizar:
+
+- lê `#NM_PROFISSIONAL`, com fallback para `NM_SOLIC`, tratando "só espaços" como vazio
+- se estiver vazio, chama `preencherMedicoSolicitante()` de novo — é o mesmo caminho da
+  etapa 6, então nada de novo é inventado
+- se ainda assim ficar vazio, lança `FINALIZACAO_FALHOU` com mensagem legível (nome e CRM do
+  médico) em vez de deixar o portal responder com HTML no meio do erro
+
+**Não altera a sequência do SOP.** O médico continua sendo preenchido na etapa 6; isto é o
+conserto de um campo que o portal apagou sozinho depois.
+
+`lerSolicitante` testada com Playwright em 5 casos: campo preenchido, campo apagado, campo só
+com espaços, campo ausente da tela e o seletor alternativo `NM_SOLIC`.
+
+---
+
 ## 22/09/2026
 
 ### Feat: quantidade por frequência do paciente, e guia gravada com o AUTORIZADO
