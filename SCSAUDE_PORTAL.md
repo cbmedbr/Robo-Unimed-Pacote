@@ -101,7 +101,56 @@ O formulário monta em AJAX. Espere pelo elemento (`waitForSelector`), nunca por
 
 ### 2.6 Formulário da guia
 
-**Ainda não mapeado.** É o próximo passo do reconhecimento.
+`/solicitacoes/exames/novo?cid=1`, alcançado pelo botão **Digitar uma Guia**.
+
+| Campo | Seletor (prefixo `form-principal:`) |
+|---|---|
+| Nº guia do prestador | `numeGuiaPrestador` |
+| Nº guia principal | `numeGuiaPrincipal` |
+| Carteirinha | `numeroCarteira` |
+| Atendimento RN | `atendimentoRN` (radio `:0` / `:1`) |
+| **Profissional solicitante** | `nomeProfissionalSolicitante:value` |
+| Conselho | `conselhoProfissional` |
+| **Nº do conselho** | `numConselhoProfissionalSolicitante:value` |
+| UF do conselho | `ufConselho` |
+| CBOS | `cbosProfissional` (select) |
+| **Contratado solicitante** | `idPrestSolicitante:value` e `razaoPrestSolicitante:value` |
+| Caráter | `caraterAtendimento` (select) |
+| Data da solicitação | `dtSolicitacao:value` |
+| Indicação clínica | `indicacaoClinica` (textarea) |
+| Observação | `observacaoInput` (textarea) |
+
+Procedimentos, em lista indexada (`procedimentos-solicitados-list:tabelaProcedimentos:0:`):
+
+| Campo | Seletor |
+|---|---|
+| Tabela | `…:0:procedimento:tabela` (select) |
+| Código | `…:0:procedimento:codigo` |
+| Descrição | `…:0:procedimento:descricao` |
+| Quantidade | `…:0:quantidadeSolicitada` |
+| Incluir | `procedimentos-solicitados-list:btnAddProcedimento` |
+
+O índice `:0:` indica que o portal aceita **várias linhas** de procedimento.
+
+**Opções confirmadas:**
+
+- `caraterAtendimento`: Selecione · **Eletiva** · Urgência/Emergência
+- `tabela`: Selecione · 00 · 18 · 19 · 20 · **22 - TUSS _ Procedimentos e eventos em saúde** · 98
+  — confirma o "tabela sempre 22" do documento da operação
+- `cbosProfissional`: só "Selecione" com o formulário vazio; deve popular depois que o
+  profissional for escolhido
+
+**Todo campo terminado em `:value` é typeahead.** É o mesmo padrão dos campos de busca do
+beneficiário: exige digitar e clicar na sugestão, e `fill()` não funciona. Isso vale para o
+profissional solicitante, o número do conselho e o contratado solicitante — justamente os três
+campos mais delicados do formulário.
+
+**Botões da tela:** Anexar Documentos · Anexos · Beneficiário · Solicitar OPME · Solicitar
+Radioterapia · Solicitar Quimioterapia · **Solicitar Autorização** · **Gerar Guia** ·
+Incluir Procedimento.
+
+> Os dois últimos em negrito são os que enviam a solicitação. O script de reconhecimento nunca
+> os clica — estão na lista de proibidos.
 
 ---
 
@@ -211,9 +260,20 @@ controle por máquina, não por branch.
 
 ## 9. O que falta
 
-1. Mapear o formulário da guia (campos, o autocomplete do contratado solicitante, o anexo)
-2. Mapear os alertas: "A guia solicitada possui alertas" e o pedido de telefone/e-mail
-3. Mapear as telas de resultado: Guia Autorizada e Guia em Análise
-4. Decidir como o CRM identifica um job como SC Saúde e roteia
-5. Auditar as carteirinhas de SC Saúde no CRM
-6. Só então escrever o adaptador
+O caminho feliz está mapeado do login ao formulário. O que resta são as telas que **só aparecem
+depois de enviar uma solicitação** — e que, portanto, o reconhecimento somente-leitura não
+alcança:
+
+1. O modal de anexo (o botão "Anexar Documentos" existe, o conteúdo não foi aberto)
+2. Os alertas: "A guia solicitada possui alertas" e o pedido de telefone/e-mail
+3. As telas de resultado: Guia Autorizada e Guia em Análise
+4. A tela de captura de uma guia que ficou em análise
+
+Para essas quatro só há dois caminhos: alguém percorre o fluxo manualmente com o navegador
+instrumentado, ou a primeira execução real do robô é acompanhada de perto, salvando os dumps.
+
+Além disso, antes de escrever o adaptador:
+
+5. Decidir como o CRM identifica um job como SC Saúde e roteia
+6. Ensinar o CRM a regra de quantidade por mês
+7. Auditar as carteirinhas de SC Saúde no CRM
