@@ -316,6 +316,10 @@ Fica fora do primeiro corte.
 
 ## 8. Como isolar numa máquina só
 
+Duas coisas diferentes precisam ser isoladas, e a resposta não é a mesma para as duas.
+
+### O adaptador (código que o robô roda sozinho)
+
 O `iniciar.bat` puxa da `main` automaticamente, então **manter o código numa branch não protege
 ninguém**: no instante do merge, todas as máquinas recebem.
 
@@ -329,6 +333,24 @@ no `.env` **apenas** da máquina de teste. O servidor recusa job de SC Saúde se
 nas demais máquinas o código fica inerte mesmo presente. Mesmo princípio do `SENHA_VERSAO.txt`:
 controle por máquina, não por branch.
 
+### O observador (ferramenta rodada à mão)
+
+Aqui não é preciso gate nenhum. `observar-scsaude.bat` e `unimed-mvp-final/observar-scsaude.ts`
+**não são chamados por nada** — nem pelo `iniciar.bat`, nem pelo servidor, nem pelo robô. Nas
+outras máquinas os dois arquivos chegam pelo `git pull` e ficam parados no disco.
+
+Por isso podem ir para a `main` sem risco, e é assim que se entrega a ferramenta para uma
+colaboradora distante, sem pen drive.
+
+O que o observador faz: abre um Chrome no portal e registra cada tela nova (HTML, imagem,
+inventário de campos) e cada chamada `/rest/`. **Não clica, não preenche, não envia.** Também
+**não faz login** — quem entra é a pessoa, com a senha dela, que assim não precisa sair da
+máquina dela.
+
+A saída fica em `unimed-mvp-final/recon-scsaude-manual/`, coberta pelo `recon-*/` do
+`.gitignore`. **Contém nome, CPF e carteirinha de paciente real** — este repositório é público,
+então essa pasta nunca pode ser commitada nem publicada; vai compactada, por canal interno.
+
 ---
 
 ## 9. O que falta
@@ -341,14 +363,11 @@ solicitação** — que o reconhecimento somente-leitura não alcança:
 2. As telas de resultado: Guia Autorizada e Guia em Análise
 3. A tela de captura de uma guia que ficou em análise
 
-Para essas três, o caminho é acompanhar uma autorização real feita pela colaboradora que opera
-o portal, com o observador ligado.
-
-Para essas quatro só há dois caminhos: alguém percorre o fluxo manualmente com o navegador
-instrumentado, ou a primeira execução real do robô é acompanhada de perto, salvando os dumps.
+Para as três, o caminho é a colaboradora que opera o portal fazer uma autorização real com o
+observador ligado (seção 8) e mandar os dumps.
 
 Além disso, antes de escrever o adaptador:
 
-5. Decidir como o CRM identifica um job como SC Saúde e roteia
-6. Ensinar o CRM a regra de quantidade por mês
-7. Auditar as carteirinhas de SC Saúde no CRM
+4. Decidir como o CRM identifica um job como SC Saúde e roteia
+5. Ensinar o CRM a regra de quantidade por mês
+6. Auditar as carteirinhas de SC Saúde no CRM
