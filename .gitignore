@@ -5,5 +5,11 @@ screenshots/
 dump-*.html
 dump-*.png
 *.log
+
+# Reconhecimento de portal: os dumps contêm nome, CPF e carteirinha de
+# pacientes reais. Este repositório é PÚBLICO — nada disso pode ser commitado.
+recon-*/
+*-tmp.ts
+*-tmp.js
 dist/
 .cache/
