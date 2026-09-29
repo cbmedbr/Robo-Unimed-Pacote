@@ -4,6 +4,32 @@
 
 ---
 
+## 29/09/2026
+
+### SC Saúde: observador do portal, entregue por commit
+**Arquivos:** `observar-scsaude.bat`, `unimed-mvp-final/observar-scsaude.ts`, `SCSAUDE_PORTAL.md`
+
+O mapeamento do SC Saúde parou no formulário preenchido. As telas que faltam — alertas,
+"Guia Autorizada", "Guia em Análise" e a captura de uma guia em análise — **só aparecem
+depois de enviar uma solicitação real**, e quem envia é a colaboradora que opera o portal,
+em outra cidade.
+
+O observador abre um Chrome no portal e registra cada tela nova (HTML, imagem, inventário
+de campos) e cada chamada `/rest/`. **Não clica, não preenche, não envia.** Também **não faz
+login**: quem entra é a pessoa, então a senha do SC Saúde não precisa viajar no repositório.
+
+Sobre o receio de a novidade cair na máquina de todo mundo: **commitar não ativa nada**. Nem
+o `iniciar.bat` nem o servidor chamam estes dois arquivos — nas outras máquinas eles chegam
+pelo `git pull` e ficam parados no disco. É diferente do futuro adaptador, que o robô vai
+rodar sozinho e por isso vai precisar do gate `SCSAUDE_HABILITADO` no `.env` de uma máquina
+só (`SCSAUDE_PORTAL.md`, seção 8).
+
+Cada execução grava numa subpasta com data e hora dentro de `recon-scsaude-manual/`, para
+duas execuções não se misturarem. Essa pasta tem nome, CPF e carteirinha de paciente real e
+continua coberta pelo `recon-*/` do `.gitignore` — **este repositório é público**.
+
+---
+
 ## 25/09/2026
 
 ### Fix: `FINALIZACAO_FALHOU` — o robô detectava o campo do médico vazio e finalizava mesmo assim
