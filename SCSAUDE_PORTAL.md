@@ -152,6 +152,76 @@ Incluir Procedimento.
 > Os dois últimos em negrito são os que enviam a solicitação. O script de reconhecimento nunca
 > os clica — estão na lista de proibidos.
 
+#### Comportamento confirmado com um caso real (29/09/2026)
+
+Preenchemos o formulário inteiro com um pedido de verdade, **parando antes de solicitar**.
+Tudo abaixo foi observado, não deduzido:
+
+| Campo | O que acontece |
+|---|---|
+| Carteirinha, nome, CNS | já vêm preenchidos do beneficiário escolhido |
+| Atend. a RN | já vem em **Não** — não precisa mexer |
+| Profissional solicitante | typeahead por **nome**; devolve `<nº conselho> - <Nome do Médico>` |
+| Conselho / nº / UF | preenchem **sozinhos** ao escolher o profissional |
+| CBOS | preenche **sozinho** (`225125`, "Médico clínico") e é a única opção |
+| Contratado solicitante | typeahead; ver a cadeia de fallback abaixo |
+| Data da solicitação | já vem com **a data de hoje** |
+| Caráter | select comum, "Eletiva" |
+| Indicação clínica | textarea comum |
+| Procedimento | **também é typeahead**, não um campo de texto |
+| Quantidade | campo comum |
+
+**A cadeia de fallback do contratado solicitante funciona como o documento descreve.** No caso
+testado, a médica é de outro estado e a clínica dela não tem cadastro:
+
+```
+"<nome da clínica do pedido>"  → nenhuma sugestão
+"consultorio"                  → 99999999999999 - CONSULTORIO
+```
+
+O prestador genérico tem código `99999999999999`. Vale notar que o fallback **não é um erro**:
+é o caminho normal para médico de fora, e vai acontecer com frequência.
+
+**O procedimento é typeahead e devolve a regra de cobertura na descrição:**
+
+```
+22 - 10101118 - Sessao de Psicoterapia / Psicologo - (12 ou ate 40 por ano se cumprir diretriz)
+```
+
+Ou seja, o próprio portal informa o limite anual. Isso é informação nova, que não estava no
+documento da operação, e pode importar para o CRM ao calcular quantidade.
+
+#### Modal "Anexar Documento"
+
+Abre por cima do formulário e tem: **Arquivo para anexar** (botão *Adicionar*), **Mensagem**
+(textarea) e os botões **Anexar** / **Cancelar**.
+
+A tela ainda lista, acima, os **Documentos Necessários** — no caso, "1. Pedido Médico" — com um
+ícone de clipe na linha.
+
+#### Informativos modais
+
+O portal abre informativos que ficam **por cima e engolem os cliques**, e aparecem de forma
+**intermitente**: no mesmo fluxo, um paciente disparou o modal e outro não.
+
+Sempre tentar fechar (botão "Fechar") antes de cada clique importante. Existe um checkbox
+"Ok. Entendi. Não abrir automaticamente", mas é preferível que a automação seja resistente ao
+modal a depender de uma preferência da conta que também afeta quem usa o portal à mão.
+
+#### Cuidado com seleção por texto
+
+Três vezes o mesmo erro pegou o reconhecimento:
+
+| Elemento | Armadilha |
+|---|---|
+| Entrar | é `input[type=submit]`, **não tem texto** — clicar por texto pega outro elemento |
+| Próximo Passo | idem |
+| Digitar uma Guia | o texto aparece **também no parágrafo informativo** que cita o botão |
+
+Regra para o adaptador: **selecionar por `name`/`id` sempre que existir**; por texto só em último
+caso e restringindo a tag (`a:has-text(...)`, nunca `getByText`). Este portal é generoso nisso —
+quase tudo tem `name` estável no padrão `form-principal:…`.
+
 ---
 
 ## 3. API REST interna
@@ -164,6 +234,9 @@ automação de tela é mais previsível e a sessão já funciona —, mas são �
 | `/rest/operadoras/757444/beneficiarios?numeroCarteira=` | busca por carteirinha |
 | `/rest/operadoras/757444/beneficiarios?cpf=` | busca por CPF |
 | `/rest/operadoras/757444/beneficiarios?nome=` | busca por nome |
+| `/rest/operadoras/757444/profissionais?nome=` | busca do médico solicitante |
+| `/rest/operadoras/757444/prestadores/local?nome=` | busca do contratado solicitante |
+| `/rest/beneficios?origem=P&beneficioCodigoTuss=&codigoTabela=` | busca do procedimento |
 | `/rest/solicitacoes/quantidades/{diarias,mensais,periodo}` | números do painel |
 
 A busca devolve `numeroCarteira`, `pessoa.nome`, `pessoa.cpf`, entre outros. Quando não encontra,
@@ -260,14 +333,16 @@ controle por máquina, não por branch.
 
 ## 9. O que falta
 
-O caminho feliz está mapeado do login ao formulário. O que resta são as telas que **só aparecem
-depois de enviar uma solicitação** — e que, portanto, o reconhecimento somente-leitura não
-alcança:
+O caminho feliz está mapeado do login até o **formulário preenchido**, com um caso real, e o
+modal de anexo também. O que resta são as telas que **só aparecem depois de enviar uma
+solicitação** — que o reconhecimento somente-leitura não alcança:
 
-1. O modal de anexo (o botão "Anexar Documentos" existe, o conteúdo não foi aberto)
-2. Os alertas: "A guia solicitada possui alertas" e o pedido de telefone/e-mail
-3. As telas de resultado: Guia Autorizada e Guia em Análise
-4. A tela de captura de uma guia que ficou em análise
+1. Os alertas: "A guia solicitada possui alertas" e o pedido de telefone/e-mail
+2. As telas de resultado: Guia Autorizada e Guia em Análise
+3. A tela de captura de uma guia que ficou em análise
+
+Para essas três, o caminho é acompanhar uma autorização real feita pela colaboradora que opera
+o portal, com o observador ligado.
 
 Para essas quatro só há dois caminhos: alguém percorre o fluxo manualmente com o navegador
 instrumentado, ou a primeira execução real do robô é acompanhada de perto, salvando os dumps.
