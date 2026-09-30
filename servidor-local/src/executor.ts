@@ -82,24 +82,41 @@ async function jobParaInputRobo(job: UnimedJob): Promise<{
 
   // 6. Indicação clínica — texto enviado ao portal Unimed
   //
+  // Formato: "CID <código> <descrição>", e mais nada.
+  //   exemplo: "CID F41.1 Transtorno de ansiedade generalizada"
+  //
+  // Até 30/09/2026 o texto também trazia "Encaminhamento para psicoterapia",
+  // a quantidade de sessões e, quando a frequência era maior que 1x por
+  // semana, os dias de atendimento. A clínica definiu que o campo deve levar
+  // apenas o diagnóstico.
+  //
   // DEVE começar com "CID " — a validação do robô exige esse prefixo.
-  //
-  // Desde 22/09/2026 o CRM calcula a quantidade em vez de mandar sempre 5:
-  // quem atende 2x por semana recebia autorização para metade das sessões que
-  // usa. Quando a frequência é maior que 1x, ela entra no texto — é o que
-  // sustenta um pedido de 9 ou 13 sessões diante da operadora.
-  //
-  // Jobs anteriores à migration 314 vêm com esses campos nulos e usam o texto
-  // antigo, sem inventar frequência que não foi calculada.
-  const temFrequencia =
-    (job.sessoes_por_semana ?? 0) > 1 && !!job.dias_semana && !!job.cobertura_ate;
+  const codigoCid = (job.cid_snapshot ?? "").trim();
+  const descricaoCid = await buscarDescricaoCid(codigoCid);
 
-  const indicacaoClinica = temFrequencia
-    ? `CID ${job.cid_snapshot}. Encaminhamento para psicoterapia. ` +
-      `Atendimento ${job.sessoes_por_semana}x por semana (${job.dias_semana}). ` +
-      `Quantidade solicitada: ${job.procedimento_quantidade} sessões, ` +
-      `cobertura até ${formatarDataBR(job.cobertura_ate!)}.`
-    : `CID ${job.cid_snapshot}. Encaminhamento para psicoterapia. Quantidade solicitada: ${job.procedimento_quantidade} sessões.`;
+  // Sem descrição o job falha aqui, antes de abrir navegador. Decisão da
+  // clínica: é preferível travar o job a mandar indicação clínica incompleta.
+  // Acontece com código que não existe no CID-10 (F41.7, F41.32) e com código
+  // válido ainda ausente da tabela `cids` — nos dois casos alguém precisa
+  // corrigir o cadastro.
+  if (!descricaoCid) {
+    // A busca é exata, então `f41.1` não acha nada. Sem esta distinção o erro
+    // mandaria cadastrar um código que na verdade só está mal digitado — e o
+    // robô recusaria esse mesmo código adiante, por formato.
+    const formatoValido = /^[A-Z]\d{2}(\.\d{1,2})?$/.test(codigoCid);
+
+    throw new Error(
+      `CID_SEM_DESCRICAO: não há descrição para o CID "${codigoCid}", então não dá para montar ` +
+        "a indicação clínica. " +
+        (formatoValido
+          ? "O código está bem formado, mas não existe na tabela de CIDs — cadastre-o lá, " +
+            "ou corrija o CID no cadastro do paciente."
+          : "O código está fora do formato do CID-10 (letra + 2 dígitos + opcional .dígitos, " +
+            "ex: F41.1) — corrija o CID no cadastro do paciente.")
+    );
+  }
+
+  const indicacaoClinica = `CID ${codigoCid} ${descricaoCid}`;
 
   // 7. Normalizar CRM do médico — o OCR pode extrair como "12/23929" (código
   // numérico da UF + barra + número). Mapa de códigos numéricos → UF:
@@ -247,18 +264,6 @@ function calcularCicloMensal(isPrimeiraGuia: boolean): {
   return { dataEmissao: iso(primeiroDia), mesUtilizacao: iso(primeiroDia) };
 }
 
-/**
- * "2026-10-07" → "07/10/2026".
- *
- * Fatia a string em vez de usar `new Date()`: a data vem como dia de
- * calendário e `new Date("2026-10-07")` é interpretada como UTC, virando 06/10
- * no fuso de Brasília. Foi assim que sessões já foram gravadas no dia errado.
- */
-function formatarDataBR(iso: string): string {
-  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
-}
-
 async function buscarTelefonePaciente(pacienteId: string): Promise<string> {
   const { data } = await supabase
     .from("pacientes")
@@ -266,6 +271,25 @@ async function buscarTelefonePaciente(pacienteId: string): Promise<string> {
     .eq("id", pacienteId)
     .maybeSingle();
   return data?.telefone || data?.responsavel_telefone || "";
+}
+
+/**
+ * Descrição oficial do CID, pela tabela de referência `cids`.
+ *
+ * A descrição não pode sair do cadastro do paciente: o `cid_snapshot` do job é
+ * de quando o job foi criado e diverge do cadastro atual em ~12% dos casos
+ * (e em ~25% o paciente sequer tem CID preenchido, embora o job tenha). Buscar
+ * pelo código garante que descrição e código sempre falam do mesmo diagnóstico.
+ *
+ * Retorna "" quando o código não existe na tabela — quem chama decide.
+ */
+async function buscarDescricaoCid(codigo: string): Promise<string> {
+  const { data } = await supabase
+    .from("cids")
+    .select("descricao")
+    .eq("codigo", codigo.trim())
+    .maybeSingle();
+  return (data?.descricao || "").trim();
 }
 
 async function buscarEmailPaciente(pacienteId: string): Promise<string> {
@@ -334,11 +358,18 @@ export async function executarJob(jobId: string): Promise<void> {
       // Ignora erro de cleanup
     }
   } catch (e: any) {
-    console.error(`[${jobId}] Erro fatal:`, e.message);
+    const mensagem = e.message ?? "Erro antes de iniciar o robô";
+    console.error(`[${jobId}] Erro fatal:`, mensagem);
+
+    // Mensagem no formato "CODIGO: detalhe" vira o próprio código no CRM. Sem
+    // isto tudo que falha antes do robô aparece como ERRO_PRE_EXECUCAO, que
+    // não diz o que corrigir.
+    const prefixo = /^([A-Z][A-Z0-9_]{4,}):/.exec(mensagem);
+
     resultado = {
       sucesso: false,
-      erro_codigo: "ERRO_PRE_EXECUCAO",
-      erro_mensagem: e.message ?? "Erro antes de iniciar o robô",
+      erro_codigo: prefixo ? prefixo[1] : "ERRO_PRE_EXECUCAO",
+      erro_mensagem: mensagem,
       duracao_ms: Date.now() - inicioMs,
     };
   }

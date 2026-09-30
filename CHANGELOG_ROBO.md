@@ -6,6 +6,41 @@
 
 ## 30/09/2026
 
+### Indicação clínica passa a levar só o CID e sua descrição
+**Arquivos:** `servidor-local/src/executor.ts`, `FLUXOS_NEGOCIO.md`, `DOCUMENTACAO_ROBO.md`
+
+O campo estava saindo assim:
+
+```
+CID F43. Encaminhamento para psicoterapia. Quantidade solicitada: 5 sessões.
+```
+
+E passa a sair assim:
+
+```
+CID F43 Reações ao stress grave e transtornos de adaptação
+```
+
+A descrição vem da tabela `cids`, consultada **pelo código** do job — e não de
+`pacientes.cid_descricao_snapshot`, porque o `cid_snapshot` do job é de quando o job foi criado:
+em ~12% dos jobs ele diverge do CID atual do paciente, e em ~25% o paciente nem tem CID
+preenchido embora o job tenha. Buscar pelo código garante que código e descrição falam do mesmo
+diagnóstico. Cobertura medida nos jobs de setembro: 946 de 977 (97%).
+
+**Sem descrição, o job falha** com `CID_SEM_DESCRICAO`, antes de abrir o navegador — decisão da
+clínica. São ~3% dos casos: código que não existe no CID-10 (`F41.7`, `F41.32`) e código válido
+ainda ausente da tabela `cids` (`Z50.4`, `H83.0`). Nos dois casos alguém precisa corrigir o
+cadastro, e é preferível travar o job a mandar indicação clínica incompleta.
+
+Erros do servidor no formato `CODIGO: detalhe` agora viram o próprio código no CRM, em vez de
+cair todos em `ERRO_PRE_EXECUCAO`.
+
+**O que isto revoga:** em 22/09 a frequência passou a ir na indicação clínica
+(`Atendimento 2x por semana (qua, sex)`) justamente para sustentar pedidos de 9 ou 13 sessões
+diante da operadora. Essa justificativa sai da guia. O cálculo da quantidade não muda — as
+colunas `sessoes_por_semana`, `dias_semana` e `cobertura_ate` continuam sendo usadas para isso.
+**Se a Unimed voltar a cortar pedidos acima de 5 sessões, é esta mudança que se olha primeiro.**
+
 ### Glosa: a indicação clínica saía em branco nas guias
 **Arquivos:** `unimed-mvp-final/src/indicacao_clinica.ts` (novo),
 `unimed-mvp-final/src/autorizacao.ts`, `unimed-mvp-final/src/finalizar.ts`,

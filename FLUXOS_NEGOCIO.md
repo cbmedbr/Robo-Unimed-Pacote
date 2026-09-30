@@ -28,9 +28,10 @@
 7. **Profissional executante é sempre o psicólogo que realmente atendeu**, conforme o agendamento no CRM.
    Não existe fallback para outro profissional — se o psicólogo não vier informado, o robô deve falhar.
 8. **Prestador/contratado é sempre a Clínica Luciano Noceti**, código na operadora `300788`.
-9. **Toda solicitação de autorização leva indicação clínica começando pelo CID do paciente.**
-   Campo obrigatório desde 30/09/2026 — sem ele a guia é recusada ou glosada. O texto vem pronto
-   do CRM; o robô não o inventa nem o completa.
+9. **A indicação clínica leva o CID e a descrição do CID, e mais nada.**
+   Formato exato: `CID F41.1 Transtorno de ansiedade generalizada`. Campo obrigatório desde
+   30/09/2026 — sem ele a guia é recusada ou glosada. O texto vem pronto do CRM; o robô não o
+   inventa nem o completa. Sem descrição para o código, o job **falha**.
 
 ---
 
@@ -119,10 +120,11 @@
 16. **Data da solicitação:** alterar para a data retroativa, quando necessário.
 17. **Caráter de atendimento:** Eletivo.
 18. **Tipo de atendimento:** Outras terapias.
-19. **Indicação clínica: obrigatória, e começa pelo CID do paciente** — o mesmo CID que consta no
-    pedido médico e no cadastro do paciente no CRM. Passou a ser exigida pela Unimed em
-    30/09/2026 (*"O valor do campo Indicação clínica é obrigatório para esse tipo de
-    atendimento"*); antes era opcional, e guia sem esse campo foi **glosada**.
+19. **Indicação clínica: `CID <código> <descrição>`, e nada além disso.** Exemplo:
+    `CID F41.1 Transtorno de ansiedade generalizada`. O código é o do pedido médico, que também
+    está no cadastro do paciente; a descrição vem da tabela de CIDs do CRM. Passou a ser exigida
+    pela Unimed em 30/09/2026 (*"O valor do campo Indicação clínica é obrigatório para esse tipo
+    de atendimento"*); antes era opcional, e guia sem esse campo foi **glosada**.
 20. **Indicação de acidente:** Não acidente.
 
 ### 3.7 Procedimentos solicitados
@@ -131,21 +133,26 @@
     por semana recebia autorização para metade das sessões que usa. Agora o CRM conta as sessões que
     exigem guia entre hoje e o fim da validade, por **(paciente, tipo de procedimento, psicólogo
     executante)** — pode dar 5, 9, 13. O robô digita o que vier e **não recalcula nada**.
-23. Quando a frequência é maior que 1× por semana, a **indicação clínica** informa isso
-    (`Atendimento 2x por semana (qua, sex)`) — é o que sustenta o número maior diante da operadora.
+
+> Entre 22/09 e 30/09/2026 a indicação clínica trazia a frequência
+> (`Atendimento 2x por semana (qua, sex)`) para justificar pedidos de 9 ou 13 sessões. Em
+> 30/09/2026 a clínica decidiu que o campo leva **apenas o CID e sua descrição** (passo 19), e
+> essa justificativa saiu da guia. A quantidade continua sendo calculada pela frequência — só
+> não é mais explicada dentro do campo. **Se a Unimed passar a cortar pedidos acima de 5
+> sessões, é aqui que se olha primeiro.**
 
 ### 3.8 Dados do contratado executante
-24. **Data do atendimento:** alterar para a data retroativa correspondente ao atendimento.
-25. **Nome do profissional executante:** selecionar o **psicólogo que efetivamente realizou o
+23. **Data do atendimento:** alterar para a data retroativa correspondente ao atendimento.
+24. **Nome do profissional executante:** selecionar o **psicólogo que efetivamente realizou o
     atendimento**, conforme o agendamento do paciente no CRM.
 
 ### 3.9 Anexar documentos
-26. Clicar no ícone de **Anexo** → **Escolher arquivo** → anexar o **pedido médico** → **Anexar**.
-27. Após a confirmação do anexo, clicar em **Finalizar**.
+25. Clicar no ícone de **Anexo** → **Escolher arquivo** → anexar o **pedido médico** → **Anexar**.
+26. Após a confirmação do anexo, clicar em **Finalizar**.
 
 ### 3.10 Geração da guia
-28. Após finalizar a solicitação, clicar em **Gerar guia** para concluir a autorização retroativa.
-29. **Conferir quantas sessões a Unimed autorizou.** Ela pode liberar menos do que foi pedido, e é o
+27. Após finalizar a solicitação, clicar em **Gerar guia** para concluir a autorização retroativa.
+28. **Conferir quantas sessões a Unimed autorizou.** Ela pode liberar menos do que foi pedido, e é o
     **autorizado** que vale — é ele que o CRM grava como saldo da guia.
 
 ---
@@ -189,7 +196,9 @@ mantido.** Não são bugs nem dívida técnica — não "corrija" nenhum deles s
 3. **Quantidade de sessões.** ~~O SOP fixa 5 sessões por autorização~~ — **resolvido em 22/09/2026**:
    o CRM passou a calcular a quantidade pela frequência do paciente, e o SOP (passo 21) foi
    atualizado. O robô continua aceitando de 1 a 60 (`validacao.ts`) e **não recalcula nada** — a
-   decisão é do CRM, como sempre foi na prática.
+   decisão é do CRM, como sempre foi na prática. Em **30/09/2026** a justificativa da frequência
+   saiu da indicação clínica, que passou a levar só o CID e a descrição; o cálculo da quantidade
+   não mudou.
 4. **E-mail e telefone.** O SOP manda preencher e-mail `atendimento@lucianonoceti.com.br` e o telefone
    do paciente. O robô **deixa o celular em branco** e só preenche e-mail se for um e-mail real do
    paciente, porque o portal rejeita a guia quando telefone/e-mail são do prestador

@@ -56,7 +56,7 @@ Antes de abrir o browser, valida:
 - `carteirinha_raw`: se começa com `0025` → tipo deve ser `LOCAL`; senão → `INTERCAMBIO`. Deve ter exatamente 17 dígitos
 - `medico_solicitante`: nome ≥ 3 chars, `uf_crm` = 2 letras maiúsculas, `numero_crm` = apenas dígitos (sem mínimo)
 - `cid`: formato `/^[A-Z]\d{2}(\.\d{1,2})?$/`
-- `indicacao_clinica_formatada`: deve começar com `"CID "`
+- `indicacao_clinica_formatada`: `CID <código> <descrição>` — deve começar com `"CID "`
 - `procedimento.codigo`: um de `50000470`, `2250005103`, `2250005278`, `2250005367`
 - Quantidade: inteiro 1–60
 - `especialidade_pedido`: deve ser `"PSICOLOGIA"`
@@ -467,6 +467,7 @@ Layout da linha (confirmado em 21/08/2026 contra guias reais):
 |---|---|
 | `CAMPO_OBRIGATORIO_REJEITADO` | Modal ou campo obrigatório não encontrado |
 | `INDICACAO_CLINICA_AUSENTE` | Indicação clínica vazia ou campo ausente — obrigatória para "Outras Terapias" |
+| `CID_SEM_DESCRICAO` | CID do job não está na tabela `cids`, então não há descrição para montar a indicação clínica (falha no servidor, antes do robô) |
 | `PROCEDIMENTO_INVALIDO` | Código inválido |
 
 ### Anexo
@@ -551,24 +552,31 @@ diferentes (psicoterapia e ABA) ou psicólogos diferentes. Nada agrupa ou descar
 `codigo_guia` é único por autorização — não há como uma guia de ABA ser reaproveitada para
 psicoterapia.
 
-#### Campos do job usados na indicação clínica (migration 314, 22/09/2026)
-
-| Coluna | Exemplo | Uso |
-|---|---|---|
-| `sessoes_por_semana` | `2` | dias distintos da semana, por (paciente, tipo, psicólogo) |
-| `dias_semana` | `"qua, sex"` | entra no texto |
-| `cobertura_ate` | `2026-10-07` | até quando a guia precisa cobrir |
-| `psicologo_executante_id` | uuid | o psicólogo **da linha** |
-
-Com `sessoes_por_semana > 1`, o texto ganha a justificativa da frequência:
+#### Como a indicação clínica é montada (`executor.ts`)
 
 ```
-CID F41.1. Encaminhamento para psicoterapia. Atendimento 2x por semana (qua, sex).
-Quantidade solicitada: 9 sessões, cobertura até 07/10/2026.
+CID <código> <descrição>
+CID F41.1 Transtorno de ansiedade generalizada
 ```
 
-Jobs anteriores à migration têm esses campos `null` e usam o texto antigo — sem inventar
-frequência que não foi calculada. O prefixo `CID ` é obrigatório em ambos (`validacao.ts`).
+O código é o `cid_snapshot` do job. A descrição vem de `buscarDescricaoCid()`, que consulta a
+tabela **`cids`** pelo código.
+
+**Por que não usar `pacientes.cid_descricao_snapshot`:** o `cid_snapshot` do job é de quando o
+job foi criado. Em ~12% dos jobs ele diverge do CID atual do paciente, e em ~25% o paciente nem
+tem CID preenchido embora o job tenha. Buscar pelo código garante que descrição e código falam
+do mesmo diagnóstico.
+
+**Sem descrição o job falha** com `CID_SEM_DESCRICAO`, antes de abrir o navegador. Acontece com
+código que não existe no CID-10 (`F41.7`, `F41.32`) e com código válido ainda ausente da tabela
+`cids` (`Z50.4`, `H83.0`) — nos dois casos alguém precisa corrigir o cadastro. Decisão da
+clínica em 30/09/2026: preferível travar o job a mandar indicação clínica incompleta.
+
+Até 30/09/2026 o texto também trazia `Encaminhamento para psicoterapia`, a quantidade de sessões
+e, com `sessoes_por_semana > 1`, os dias de atendimento — que era o que sustentava pedidos de 9
+ou 13 sessões diante da operadora. A clínica definiu que o campo leva apenas o diagnóstico; as
+colunas `sessoes_por_semana`, `dias_semana` e `cobertura_ate` continuam existindo e sendo usadas
+para **calcular a quantidade**, só não entram mais no texto.
 
 ### Execução de sessão
 1. CRM chama `POST localhost:9876/executar-sessao` com dados completos
