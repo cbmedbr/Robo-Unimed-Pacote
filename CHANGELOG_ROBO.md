@@ -4,6 +4,39 @@
 
 ---
 
+## 30/09/2026
+
+### Glosa: a indicação clínica saía em branco nas guias
+**Arquivos:** `unimed-mvp-final/src/indicacao_clinica.ts` (novo),
+`unimed-mvp-final/src/autorizacao.ts`, `unimed-mvp-final/src/finalizar.ts`,
+`FLUXOS_NEGOCIO.md`, `DOCUMENTACAO_ROBO.md`
+
+A Unimed passou a exigir o campo **Indicação clínica** para o tipo de atendimento
+"03 - Outras Terapias" — *"O valor do campo Indicação clínica é obrigatório para esse tipo de
+atendimento"*. Enquanto era opcional, guia sem o campo passava; agora veio **glosa**.
+
+O robô já montava o texto (sempre começando pelo CID do paciente, em `executor.ts`) e o escrevia
+no portal. O problema era o que acontecia depois — e são três defeitos da mesma família do
+`FINALIZACAO_FALHOU` corrigido em 25/09:
+
+1. **Ordem errada.** A indicação era preenchida e só então o *Tipo de atendimento* era mudado.
+   Mudar esse campo recarrega parte do formulário — comportamento já conhecido e tratado em
+   `preparar_execucao.ts` — o que apagava a indicação logo em seguida. Agora o tipo vem antes.
+2. **Falha silenciosa.** O preenchimento estava dentro de um `try/catch` que só logava
+   `"campo Indicação clínica não encontrado"` e seguia em frente. Agora
+   `preencherIndicacaoClinica()` relê o campo depois de gravar e **falha** se ficar vazio.
+3. **Sem rede de proteção.** O clique em Atualizar na linha do procedimento (etapa 7) apaga
+   campos do topo do formulário — é exatamente o que fazia com o médico solicitante. Agora
+   `garantirIndicacaoClinicaPreenchida()` roda antes de finalizar, ao lado de
+   `garantirSolicitantePreenchido()`, e re-preenche se o portal tiver esvaziado.
+
+O texto continua vindo pronto do CRM: o robô não monta nem completa indicação clínica.
+
+**Em aberto:** as guias geradas antes desta correção podem ter saído sem o campo e ficam
+expostas a glosa. Não dá para saber quais pelo CRM — a informação só existe no portal.
+
+---
+
 ## 29/09/2026
 
 ### SC Saúde: observador do portal, entregue por commit

@@ -8,6 +8,7 @@ import { preencherMedicoSolicitante } from "./medico";
 import { preencherProcedimento } from "./procedimento";
 import { anexarPedidoMedico } from "./anexo";
 import { finalizarGuia } from "./finalizar";
+import { preencherIndicacaoClinica } from "./indicacao_clinica";
 
 /**
  * Orquestrador do fluxo completo de autorização.
@@ -330,21 +331,24 @@ async function preencherCamposBasicos(
     logger.warn("campo Caráter do atendimento não encontrado");
   }
 
-  // Indicação clínica: "CID XXX" — id="DS_INDIC_CLINICA"
-  try {
-    await page.locator('#DS_INDIC_CLINICA').fill(input.indicacao_clinica_formatada);
-    logger.info("campo Indicação clínica preenchido");
-  } catch {
-    logger.warn("campo Indicação clínica não encontrado");
-  }
-
   // Tipo de atendimento: 03 - Outras Terapias (value="03")
+  //
+  // Vem ANTES da indicação clínica: o portal recarrega parte do formulário ao
+  // mudar este campo (mesmo comportamento tratado em preparar_execucao.ts), e
+  // com a ordem invertida a indicação era preenchida e apagada em seguida.
   try {
     await page.locator('select[name="DM_TP_ATEND_SADT"]').selectOption({ value: "03" });
     logger.info("campo Tipo de atendimento preenchido");
   } catch {
     logger.warn("campo Tipo de atendimento não encontrado");
   }
+
+  // Indicação clínica: começa com o CID do paciente — id="DS_INDIC_CLINICA".
+  //
+  // Obrigatório para "Outras Terapias". Antes isto só avisava quando falhava e
+  // seguia em frente; agora para, porque sem o campo a guia é recusada ou
+  // glosada depois.
+  await preencherIndicacaoClinica(page, input.indicacao_clinica_formatada);
 
   // Indicação de acidente: 9 - Não acidente (value="9")
   try {
@@ -530,6 +534,9 @@ function extrairCodigoErro(mensagem: string): ErroCodigo | null {
     CBO_NAO_ENCONTRADO: "CBO_NAO_ENCONTRADO",
     PROCEDIMENTO_INVALIDO: "PROCEDIMENTO_INVALIDO",
     PDF_UPLOAD_FALHOU: "PDF_UPLOAD_FALHOU",
+    INDICACAO_CLINICA_VAZIA: "INDICACAO_CLINICA_AUSENTE",
+    INDICACAO_CLINICA_NAO_ENCONTRADA: "INDICACAO_CLINICA_AUSENTE",
+    INDICACAO_CLINICA_NAO_PREENCHIDA: "INDICACAO_CLINICA_AUSENTE",
     FINALIZACAO_FALHOU: "FINALIZACAO_FALHOU",
     GUIA_NAO_GERADA: "GUIA_NAO_GERADA",
     NUMERO_GUIA_NAO_CAPTURADO: "NUMERO_GUIA_NAO_CAPTURADO",

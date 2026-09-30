@@ -143,9 +143,18 @@ CRM (migration 306), que devolve o motivo em texto ou NULL:
   - Clica Localizar
   - Clica `a:has-text("CLINICA LUCIANO NOCETI")`
 - `#DM_CARATER_SOLIC` → valor `"1"` (Eletivo)
-- `#DS_INDIC_CLINICA` → texto da indicação clínica (montado no servidor, `executor.ts`; campo tem
-  `maxlength="500"`)
 - `select[name="DM_TP_ATEND_SADT"]` → valor `"03"` (Outras Terapias)
+- `#DS_INDIC_CLINICA` → texto da indicação clínica (montado no servidor, `executor.ts`; campo tem
+  `maxlength="500"`), via `indicacao_clinica.ts`
+
+> **A ordem destes dois importa.** O portal recarrega parte do formulário ao mudar o *Tipo de
+> atendimento*, então ele vem primeiro — com a ordem invertida a indicação clínica era preenchida e
+> apagada em seguida. Mesmo comportamento já tratado em `preparar_execucao.ts`.
+
+> **Indicação clínica é obrigatória** desde 30/09/2026 para "Outras Terapias" (*"O valor do campo
+> Indicação clínica é obrigatório para esse tipo de atendimento"*). Antes era opcional, e o robô
+> apenas avisava quando não conseguia preencher — guias saíram sem o campo e vieram glosadas. Agora
+> `preencherIndicacaoClinica()` confere o valor depois de gravar e **falha** se ficar vazio.
 - `select[name="DM_TP_ACIDENTE"]` → valor `"9"` (Não acidente)
 - `select[name="FG_LIMINAR_JUDICIAL"]` → valor `"N"` ou primeira opção com "Não"
 
@@ -195,6 +204,10 @@ semana recebia autorização para metade das sessões que usava.
   salva. A função lê `#NM_PROFISSIONAL` (com fallback para `NM_SOLIC`) e, se estiver vazio, chama
   `preencherMedicoSolicitante()` de novo. Se mesmo assim ficar vazio, lança `FINALIZACAO_FALHOU`
   com mensagem legível em vez de deixar o portal responder com HTML no meio do erro
+- **Depois, `garantirIndicacaoClinicaPreenchida()`** — mesmo problema no campo vizinho. Lê
+  `#DS_INDIC_CLINICA` e, se o portal tiver esvaziado, preenche de novo com o texto do CRM. Se o
+  campo não existir na tela, apenas avisa e segue (quem valida a obrigatoriedade é o portal); se
+  existir e continuar vazio depois de re-preencher, lança `FINALIZACAO_FALHOU`
 - Clica `#Botao_Finalizar` ou `input[name="Botao_Finalizar"]` ou `input[value="Finalizar"]`
 - **Detecção de erros:** busca no HTML padrões de erro de validação
 - **Captura do número da guia** (4 estratégias em ordem):
@@ -453,6 +466,7 @@ Layout da linha (confirmado em 21/08/2026 contra guias reais):
 | Código | Causa |
 |---|---|
 | `CAMPO_OBRIGATORIO_REJEITADO` | Modal ou campo obrigatório não encontrado |
+| `INDICACAO_CLINICA_AUSENTE` | Indicação clínica vazia ou campo ausente — obrigatória para "Outras Terapias" |
 | `PROCEDIMENTO_INVALIDO` | Código inválido |
 
 ### Anexo
@@ -577,13 +591,20 @@ frequência que não foi calculada. O prefixo `CID ` é obrigatório em ambos (`
 
 1. **Campo `NM_PROFISSIONAL` limpo pelo portal** — Após clicar "Atualizar procedimento", o SGU limpa o campo do médico solicitante. **Resolvido em 25/09/2026:** o robô re-preenche antes de finalizar (`garantirSolicitantePreenchido`). Antes disso ele apenas logava um warning e clicava em Finalizar mesmo assim, o que fazia o portal recusar — era a causa do `FINALIZACAO_FALHOU`, o erro mais frequente do robô (312 ocorrências entre 25/05 e 02/09).
 
-2. **Seleção de médico por nome é frágil** — Se o nome no SGU difere do CRM (iniciais, prefixo DR.), o robô tenta 5 estratégias de fallback. Último recurso: primeiro link "Pessoa Física" na tabela.
+2. **Indicação clínica ficava em branco** — O campo `DS_INDIC_CLINICA` era opcional e o robô só
+   logava um warning quando não conseguia preenchê-lo. Em 30/09/2026 a Unimed passou a exigi-lo
+   para "Outras Terapias" e uma guia foi **glosada** por sair sem ele. **Resolvido em
+   30/09/2026:** o *Tipo de atendimento* passou a ser selecionado antes (ele recarrega o bloco e
+   apagava a indicação), o preenchimento confere o valor gravado e falha se ficar vazio, e
+   `garantirIndicacaoClinicaPreenchida()` re-preenche antes de finalizar. Mesma família do item 1.
 
-3. **Override de `window.confirm()`** — O popup de QR Code precisa de `addInitScript` para auto-aceitar `confirm()`. Backup: handler de dialog registrado.
+3. **Seleção de médico por nome é frágil** — Se o nome no SGU difere do CRM (iniciais, prefixo DR.), o robô tenta 5 estratégias de fallback. Último recurso: primeiro link "Pessoa Física" na tabela.
 
-4. **Situação default = EM_ANALISE** — Se o HTML da finalização não bater com nenhum padrão, o robô reporta EM_ANALISE (conservador). Pode gerar ciclos desnecessários de verificação.
+4. **Override de `window.confirm()`** — O popup de QR Code precisa de `addInitScript` para auto-aceitar `confirm()`. Backup: handler de dialog registrado.
 
-5. **Detecção de série é frágil** — Depende de `input[id="is_serie_1"]` com `value='1'`. Se o SGU mudar esse hidden field, o fluxo série não será detectado.
+5. **Situação default = EM_ANALISE** — Se o HTML da finalização não bater com nenhum padrão, o robô reporta EM_ANALISE (conservador). Pode gerar ciclos desnecessários de verificação.
+
+6. **Detecção de série é frágil** — Depende de `input[id="is_serie_1"]` com `value='1'`. Se o SGU mudar esse hidden field, o fluxo série não será detectado.
 
 ---
 

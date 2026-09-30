@@ -3,6 +3,7 @@ import { Config, InputAutorizacao } from "./types";
 import { logger } from "./utils/logger";
 import { capturarScreenshot } from "./utils/screenshot";
 import { preencherMedicoSolicitante } from "./medico";
+import { lerIndicacaoClinica, preencherIndicacaoClinica } from "./indicacao_clinica";
 
 /** Seletores do campo "Nome do profissional solicitante", na ordem em que o SGU já apareceu. */
 const SELETORES_SOLICITANTE = [
@@ -66,6 +67,51 @@ async function garantirSolicitantePreenchido(
 }
 
 /**
+ * Garante que a indicação clínica está preenchida antes de finalizar.
+ *
+ * Mesmo caso do médico solicitante: o campo é preenchido na etapa 5 e o SGU
+ * pode esvaziá-lo depois, ao recarregar pedaços do formulário. Enquanto o
+ * campo era opcional isso passava despercebido — a guia era gerada sem
+ * indicação clínica e vinha a glosa. Agora é obrigatório para "Outras
+ * Terapias", então confere e, se preciso, preenche de novo.
+ */
+async function garantirIndicacaoClinicaPreenchida(
+  page: Page,
+  input: InputAutorizacao
+): Promise<void> {
+  const antes = await lerIndicacaoClinica(page);
+
+  // null = o campo não existe nesta tela. Não inventa erro: quem valida a
+  // obrigatoriedade é o portal, e a etapa 5 já teria falhado se ele faltasse.
+  if (antes === null) {
+    logger.warn("campo Indicação clínica não existe nesta tela — nada a conferir");
+    return;
+  }
+
+  if (antes) {
+    logger.info({ indicacaoClinica: antes }, "campo Indicação clínica OK");
+    return;
+  }
+
+  logger.warn(
+    { cid: input.cid },
+    "campo Indicação clínica foi apagado pelo SGU — re-preenchendo antes de finalizar"
+  );
+
+  try {
+    await preencherIndicacaoClinica(page, input.indicacao_clinica_formatada);
+  } catch (err) {
+    throw new Error(
+      "FINALIZACAO_FALHOU: o SGU apagou a indicação clínica e não consegui re-preenchê-la " +
+        `(CID ${input.cid}): ${(err as Error).message}. A guia NÃO foi salva — sem este campo ` +
+        "o portal recusa a finalização e a guia seria glosada."
+    );
+  }
+
+  logger.info("indicação clínica re-preenchida com sucesso");
+}
+
+/**
  * Finaliza a autorização: clica Finalizar > Gerar autorização > captura número.
  */
 export async function finalizarGuia(
@@ -96,6 +142,11 @@ export async function finalizarGuia(
   // continua sendo preenchido na etapa 6; isto é o conserto de um campo que o
   // portal apagou sozinho depois.
   await garantirSolicitantePreenchido(page, config, input);
+
+  // Mesmo problema, campo vizinho: a indicação clínica também pode ter sido
+  // esvaziada pelo portal depois de preenchida. Ela virou obrigatória para
+  // "Outras Terapias" e foi o que gerou a glosa relatada em 30/09/2026.
+  await garantirIndicacaoClinicaPreenchida(page, input);
 
   // Garante profissional executante (psicólogo do paciente ou Luciano como default)
   await garantirProfissionalExecutante(page, config, input);

@@ -28,6 +28,9 @@
 7. **Profissional executante é sempre o psicólogo que realmente atendeu**, conforme o agendamento no CRM.
    Não existe fallback para outro profissional — se o psicólogo não vier informado, o robô deve falhar.
 8. **Prestador/contratado é sempre a Clínica Luciano Noceti**, código na operadora `300788`.
+9. **Toda solicitação de autorização leva indicação clínica começando pelo CID do paciente.**
+   Campo obrigatório desde 30/09/2026 — sem ele a guia é recusada ou glosada. O texto vem pronto
+   do CRM; o robô não o inventa nem o completa.
 
 ---
 
@@ -116,29 +119,33 @@
 16. **Data da solicitação:** alterar para a data retroativa, quando necessário.
 17. **Caráter de atendimento:** Eletivo.
 18. **Tipo de atendimento:** Outras terapias.
-19. **Indicação de acidente:** Não acidente.
+19. **Indicação clínica: obrigatória, e começa pelo CID do paciente** — o mesmo CID que consta no
+    pedido médico e no cadastro do paciente no CRM. Passou a ser exigida pela Unimed em
+    30/09/2026 (*"O valor do campo Indicação clínica é obrigatório para esse tipo de
+    atendimento"*); antes era opcional, e guia sem esse campo foi **glosada**.
+20. **Indicação de acidente:** Não acidente.
 
 ### 3.7 Procedimentos solicitados
-20. Informar o **código do procedimento** conforme o pedido médico.
-21. **Quantidade de sessões: a que o CRM calcular.** Até 22/09/2026 eram sempre 5, e quem atende 2×
+21. Informar o **código do procedimento** conforme o pedido médico.
+22. **Quantidade de sessões: a que o CRM calcular.** Até 22/09/2026 eram sempre 5, e quem atende 2×
     por semana recebia autorização para metade das sessões que usa. Agora o CRM conta as sessões que
     exigem guia entre hoje e o fim da validade, por **(paciente, tipo de procedimento, psicólogo
     executante)** — pode dar 5, 9, 13. O robô digita o que vier e **não recalcula nada**.
-22. Quando a frequência é maior que 1× por semana, a **indicação clínica** informa isso
+23. Quando a frequência é maior que 1× por semana, a **indicação clínica** informa isso
     (`Atendimento 2x por semana (qua, sex)`) — é o que sustenta o número maior diante da operadora.
 
 ### 3.8 Dados do contratado executante
-23. **Data do atendimento:** alterar para a data retroativa correspondente ao atendimento.
-24. **Nome do profissional executante:** selecionar o **psicólogo que efetivamente realizou o
+24. **Data do atendimento:** alterar para a data retroativa correspondente ao atendimento.
+25. **Nome do profissional executante:** selecionar o **psicólogo que efetivamente realizou o
     atendimento**, conforme o agendamento do paciente no CRM.
 
 ### 3.9 Anexar documentos
-25. Clicar no ícone de **Anexo** → **Escolher arquivo** → anexar o **pedido médico** → **Anexar**.
-26. Após a confirmação do anexo, clicar em **Finalizar**.
+26. Clicar no ícone de **Anexo** → **Escolher arquivo** → anexar o **pedido médico** → **Anexar**.
+27. Após a confirmação do anexo, clicar em **Finalizar**.
 
 ### 3.10 Geração da guia
-27. Após finalizar a solicitação, clicar em **Gerar guia** para concluir a autorização retroativa.
-28. **Conferir quantas sessões a Unimed autorizou.** Ela pode liberar menos do que foi pedido, e é o
+28. Após finalizar a solicitação, clicar em **Gerar guia** para concluir a autorização retroativa.
+29. **Conferir quantas sessões a Unimed autorizou.** Ela pode liberar menos do que foi pedido, e é o
     **autorizado** que vale — é ele que o CRM grava como saldo da guia.
 
 ---
@@ -157,6 +164,7 @@
 | Finalizar parcial + Confirmar (fluxo série/intercâmbio) | `src/executar_sessao.ts` (bloco `resultado.serie`) |
 | Novo exame → beneficiário local/intercâmbio → guia SADT | `src/beneficiario.ts` |
 | Datas, RN, contratado 300788, caráter, tipo de atendimento, acidente | `src/autorizacao.ts` → `preencherCamposBasicos()` |
+| Indicação clínica (começa pelo CID) | `src/indicacao_clinica.ts` |
 | Médico solicitante (cooperado / prestador externo / cadastro) | `src/medico.ts` |
 | Código do procedimento + quantidade de sessões | `src/procedimento.ts` |
 | Anexo do pedido médico | `src/anexo.ts` |

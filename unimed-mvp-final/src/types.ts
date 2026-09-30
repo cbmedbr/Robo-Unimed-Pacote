@@ -65,6 +65,7 @@ export type ErroCodigo =
   | "CBO_NAO_ENCONTRADO"
   // Formulário
   | "CAMPO_OBRIGATORIO_REJEITADO"
+  | "INDICACAO_CLINICA_AUSENTE"
   | "PROCEDIMENTO_INVALIDO"
   // Anexo
   | "PDF_UPLOAD_FALHOU"
