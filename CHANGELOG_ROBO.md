@@ -6,6 +6,22 @@
 
 ## 14/10/2026
 
+### Guia nasce com o psicólogo para quem foi autorizada
+**Arquivos:** `servidor-local/src/executor.ts`, `DOCUMENTACAO_ROBO.md`
+
+O insert da guia passa a gravar `psicologo_executante_id: job.psicologo_executante_id`. A fila de
+autorização do CRM já pedia uma guia por (paciente, tipo, psicólogo), mas a guia não guardava de
+quem era, e a distribuição ignorava o psicólogo: a sessão da psicóloga B consumia a guia
+autorizada para A, e como o robô não mexe no "Profissional Executante" na execução, a Unimed
+registrava a sessão no nome de A (invariante 7 do SOP). Medido no CRM: 333 sessões em 123 guias.
+
+A regra de preferência mora no CRM (migration 338). O CRM também grava o dono pelo job quando o
+job recebe `guia_id` — por isso um PC com o robô antigo continua certo; com esta versão a guia já
+nasce com dono e é distribuída certo desde o primeiro gatilho. **Depende da coluna
+`guias.psicologo_executante_id`** (já em produção desde 14/10/2026); sem ela o insert falharia.
+
+**Atualizar o PC da recepção:** `git pull` na pasta do robô e reiniciar o servidor.
+
 ### Execução parou de confirmar o envio — 100% de falha num dia
 **Arquivos:** `unimed-mvp-final/src/execucao/confirmar_finalizacao.ts` (novo),
 `unimed-mvp-final/src/execucao/finalizar.ts`, `unimed-mvp-final/src/executar_sessao.ts`,

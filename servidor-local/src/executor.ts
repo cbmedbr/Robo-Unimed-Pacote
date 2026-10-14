@@ -626,6 +626,12 @@ async function atualizarJobComResultado(
         paciente_id: job.paciente_id,
         medico_id: job.medico_id_snapshot,
         plano_saude_id: job.plano_saude_id_snapshot,
+        // Dono da guia (migration 338 do CRM): o psicólogo para quem ela foi
+        // pedida — o mesmo do "Profissional Executante" no portal. A
+        // distribuição no CRM prefere a guia do psicólogo da sessão; sem isto a
+        // guia nascia sem dono e a sessão de outra psicóloga podia consumi-la.
+        // Exige a coluna guias.psicologo_executante_id (já em produção).
+        psicologo_executante_id: job.psicologo_executante_id ?? null,
         sessoes_autorizadas: sessoesAutorizadas,
         sessoes_executadas: 0,
         data_emissao: dataEmissao,

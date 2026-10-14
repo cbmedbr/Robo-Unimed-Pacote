@@ -247,6 +247,15 @@ No servidor (`executor.ts`), quando o autorizado é menor que o pedido:
   continua como `sucesso` — a guia existe, só é menor);
 - o console avisa com `⚠️ AUTORIZAÇÃO PARCIAL`.
 
+**Dono da guia (desde 14/10/2026).** O insert da guia grava `psicologo_executante_id` do job — o
+psicólogo para quem a guia foi pedida, o mesmo do "Profissional Executante" no portal. No CRM
+(migration 338) a distribuição prefere a guia do psicólogo da sessão: própria → sem dono → de
+outro. Sem o dono, a sessão de outra psicóloga consumia a guia e a Unimed registrava a sessão no
+nome errado (invariante 7). O CRM tem um reforço no banco (`trg_marcar_guia_robo` grava o dono
+quando o job recebe `guia_id`), então um PC com o robô antigo continua correto; esta mudança faz
+a guia já **nascer** com dono. Depende da coluna `guias.psicologo_executante_id`, que já existe
+em produção — sem ela o insert falharia.
+
 ---
 
 ## 3. Robô de Execução de Sessão — Fluxo Completo
