@@ -4,6 +4,46 @@
 
 ---
 
+## 14/10/2026
+
+### Execução parou de confirmar o envio — 100% de falha num dia
+**Arquivos:** `unimed-mvp-final/src/execucao/confirmar_finalizacao.ts` (novo),
+`unimed-mvp-final/src/execucao/finalizar.ts`, `unimed-mvp-final/src/executar_sessao.ts`,
+`DOCUMENTACAO_ROBO.md`
+
+Em 14/10 as 6 execuções do dia falharam com `FINALIZACAO_EXECUCAO_FALHOU` — contra 2 a 6%
+de erro nos dias anteriores. A colaboradora disse que o portal estava normal, e estava
+mesmo: o problema era do robô.
+
+Depois de **Finalizar Parcial** o portal abre uma página perguntando se a pessoa confirma
+a realização parcial da guia e o envio das informações à Unimed. **Sem clicar em Confirmar
+ali, nada é enviado.** Os dois fluxos de execução achavam essa página testando
+`url.includes("finalizar_msg")`. O endereço mudou, o teste parou de casar, e o robô passou
+a fotografar a página de confirmação sem nunca clicar nela — depois esperava 30 segundos
+por uma tela de sucesso que não viria.
+
+A duração denunciava: 60-87s nas falhas contra 16-49s nos sucessos do dia anterior. Os
+~30s a mais são o laço de 3 tentativas de 5s procurando a tela de sucesso, mais as esperas.
+
+Agora a página é identificada pelo **texto da pergunta**, com o endereço antigo mantido
+como sinal adicional. O texto é o que a operadora precisa preservar, porque é o que a
+pessoa lê antes de autorizar o envio; o endereço é detalhe interno e muda sem aviso.
+
+Outras três mudanças no mesmo caminho:
+
+1. `clicarConfirmar()` **nunca clica em Cancelar**. A lista de seletores termina em opções
+   genéricas e, num formulário com Confirmar e Cancelar lado a lado, uma delas podia pegar
+   o Cancelar — descartando a execução em silêncio.
+2. A detecção da tela de sucesso virou tolerante a acento.
+3. A mensagem de erro passou a dizer **se a confirmação chegou a ser clicada**, que é o que
+   decide se repetir é seguro. Antes dizia só "pode não ter sido gravada", e na dúvida
+   alguém repetia — com risco de gravar a sessão duas vezes.
+
+Nenhuma das 6 execuções de 14/10 chegou a ser enviada: as sessões continuam em aberto no
+portal e podem ser repetidas sem risco de duplicidade.
+
+---
+
 ## 30/09/2026
 
 ### Indicação clínica passa a levar só o CID e sua descrição

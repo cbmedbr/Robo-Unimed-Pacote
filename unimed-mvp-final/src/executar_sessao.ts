@@ -10,6 +10,7 @@ import { abrirPopupCartao } from "./execucao/abrir_popup_cartao";
 import { aguardarQrCode } from "./execucao/aguardar_qrcode";
 import { finalizarParcial } from "./execucao/finalizar";
 import { DadosExecucao, ResultadoExecucao, RoboError } from "./execucao/tipos";
+import { encontrarPaginaConfirmacao, clicarConfirmar } from "./execucao/confirmar_finalizacao";
 
 /**
  * Converte a data de execução recebida do CRM para o formato do portal
@@ -208,43 +209,18 @@ export async function executarSessao(
       await page.locator('input#Button_Parcial').click({ timeout: 10000 });
       logger.info("clicou 'Finalizar Parcial' (série)");
 
-      // Polling: aguarda finalizar_msg.do aparecer em qualquer página (até 15s)
-      let paginaMsg: import("playwright").Page | null = null;
-      const inicioMsg = Date.now();
-      while (Date.now() - inicioMsg < 15000) {
-        for (const p of context.pages()) {
-          if (p.isClosed()) continue;
-          if (p.url().includes("finalizar_msg")) {
-            paginaMsg = p;
-            break;
-          }
-        }
-        if (paginaMsg) break;
-        await new Promise((r) => setTimeout(r, 500));
-      }
-
+      // Confirmação do envio, procurada por CONTEÚDO e não por endereço: em
+      // 14/10/2026 o endereço mudou e o robô deixou de confirmar em todas as
+      // execuções. Sem este clique nada chega à Unimed.
+      const paginaMsg = await encontrarPaginaConfirmacao(context, 15000);
       let confirmouMsg = false;
+
       if (paginaMsg) {
-        logger.info({ url: paginaMsg.url() }, "página finalizar_msg detectada");
         await paginaMsg.waitForLoadState("domcontentloaded", { timeout: 10000 }).catch(() => {});
         registrarDialogHandler(paginaMsg);
-
-        const botoesConfirmar = [
-          'input[value="Confirmar"]',
-          'button:has-text("Confirmar")',
-          'input[type="submit"]',
-          'input[type="button"]',
-        ];
-
-        for (const sel of botoesConfirmar) {
-          const visivel = await paginaMsg.locator(sel).first().isVisible({ timeout: 3000 }).catch(() => false);
-          if (visivel) {
-            logger.info({ seletor: sel }, "clicando Confirmar na finalizar_msg");
-            await paginaMsg.locator(sel).first().click();
-            confirmouMsg = true;
-            break;
-          }
-        }
+        confirmouMsg = await clicarConfirmar(paginaMsg);
+      } else {
+        logger.error("página de confirmação não encontrada após Finalizar Parcial (série)");
       }
 
       if (confirmouMsg) {
