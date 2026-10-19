@@ -4,6 +4,53 @@
 
 ---
 
+## 19/10/2026
+
+### Adaptador de autorização do SC Saúde (primeira versão, atrás de gate)
+**Arquivos:** `unimed-mvp-final/src/scsaude/` (novo), `unimed-mvp-final/src/index.ts`
+
+Primeiro código de SC Saúde no robô. Cobre o caminho completo de autorização, que está
+mapeado de ponta a ponta em `SCSAUDE_PORTAL.md`: login → beneficiário por CPF → formulário
+→ anexo do pedido → Solicitar Autorização → Alertas → Resultado → Guia Capturada, lendo
+número da guia, senha e validade.
+
+**Módulo separado, robô único.** Decidido em 19/10 com a operação: `src/scsaude/` não
+compartilha fluxo com o da Unimed — os portais não se parecem (JSF com popups e QR Code de
+um lado, REST com typeahead do outro) e manter juntos significaria que uma troca de tela num
+portal arrisca o outro. Foi exatamente esse tipo de acoplamento que gerou as quebras de
+outubro. Mas é **um robô só**: `index.ts` ganhou o subcomando `scsaude` ao lado de
+`autorizar`, `executar-sessao` e `verificar`. Quem usa abre o mesmo `iniciar.bat` de sempre
+e não escolhe nada — quem decide é o plano do paciente, no CRM.
+
+O código da Unimed **não foi movido** para `src/unimed/`. Seria mais simétrico, mas renomear
+imports em 19 arquivos logo depois de três incidentes em produção é risco sem ganho de
+funcionamento.
+
+Dois padrões que se repetem no portal inteiro ficaram em `portal.ts`, porque tê-los copiados
+em cada módulo é como as cópias divergem:
+
+- `typeahead()` — todo campo cujo `name` termina em `:value` exige digitar tecla a tecla e
+  clicar na sugestão. `fill()` grava o valor sem disparar a busca, o campo oculto fica vazio
+  e o portal ignora a escolha, **sem erro nenhum**.
+- `fecharInformativos()` — o portal abre modais que engolem o clique seguinte, de forma
+  intermitente: no mesmo fluxo um paciente disparou e outro não.
+
+Decisões de comportamento:
+
+- **Alerta não é falha.** Nos dois casos reais de 16/10 a guia saiu autorizada com
+  `SCAUT_0152` presente. Os códigos são registrados no resultado e o fluxo segue.
+- **Guia em análise não vira sucesso nem erro genérico.** Devolve `GUIA_EM_ANALISE` com print,
+  porque a captura posterior ainda não está automatizada.
+- **Estado lido pelo texto da tela, nunca pela URL.** É a lição de 14/10, quando a Unimed
+  mudou um endereço e o robô parou de reconhecer a confirmação.
+- A validação roda **antes de abrir o navegador** e devolve a lista do que falta no cadastro.
+
+**Nada disso está ligado em produção.** Falta o roteamento no servidor e o gate
+`SCSAUDE_HABILITADO`; sem eles nenhum job chega neste código. A execução de sessão no SC
+Saúde entrou no escopo em 19/10 mas continua sem mapa (`SCSAUDE_PORTAL.md`, seção 10).
+
+---
+
 ## 14/10/2026
 
 ### Guia nasce com o psicólogo para quem foi autorizada

@@ -458,7 +458,40 @@ casos a lista foi:
 
 ---
 
-## 10. Execução de sessão — no escopo, sem mapa
+## 10. O adaptador (código)
+
+Escrito em 19/10/2026. Vive em `unimed-mvp-final/src/scsaude/`, separado do fluxo da Unimed.
+É **um robô só**: `index.ts` ganhou o subcomando `scsaude`, e quem escolhe é o servidor a
+partir do plano do paciente.
+
+```
+npx ts-node -T src/index.ts scsaude --input job.json
+```
+
+| Arquivo | Papel |
+|---|---|
+| `tipos.ts` | input, resultado, `ErroScSaude` |
+| `config.ts` | `SCSAUDE_USUARIO`, `SCSAUDE_SENHA`, `SCSAUDE_URL` do `.env` |
+| `portal.ts` | `typeahead()` e `fecharInformativos()` — os dois padrões do portal |
+| `login.ts` | login e entrada no sistema Atendimento |
+| `beneficiario.ts` | Novo → Captura/Execução → operadora → SADT → CPF → Digitar uma Guia |
+| `formulario.ts` | médico, CBOS, contratado (com fallback), caráter, indicação, procedimento |
+| `anexo.ts` | modal Anexar Documento |
+| `finalizar.ts` | Solicitar Autorização → Alertas → Resultado → Guia Capturada |
+| `autorizacao.ts` | orquestrador, validação prévia e print de falha por etapa |
+
+O resultado sai em JSON no stdout, mesmo contrato da Unimed. Códigos de erro próprios:
+`CONFIG_AUSENTE`, `VALIDACAO_INPUT`, `CPF_INVALIDO`, `BENEFICIARIO_NAO_LOCALIZADO`,
+`MEDICO_NAO_LOCALIZADO`, `CBOS_NAO_PREENCHIDO`, `CONTRATADO_NAO_LOCALIZADO`,
+`INDICACAO_CLINICA_VAZIA`, `PROCEDIMENTO_NAO_LOCALIZADO`, `PEDIDO_MEDICO_AUSENTE`,
+`GUIA_EM_ANALISE`, `GUIA_NEGADA`, `NUMERO_GUIA_NAO_CAPTURADO`, `GUIA_NAO_CAPTURADA`.
+
+**Ainda não está ligado:** falta o roteamento no servidor e o gate `SCSAUDE_HABILITADO`.
+Nenhum job chega aqui até isso existir.
+
+---
+
+## 11. Execução de sessão — no escopo, sem mapa
 
 **Decidido em 19/10/2026: a clínica vai executar sessão no SC Saúde também**, como já faz na
 Unimed. Isso dobra o escopo do robô: além de pedir a autorização, ele terá que registrar a
@@ -487,7 +520,7 @@ paralelo com ele.
 
 ---
 
-## 11. O que ainda falta
+## 12. O que ainda falta
 
 1. **A guia que fica EM ANÁLISE.** Nas duas autorizações reais o resultado foi *Guia
    Autorizada* na hora, então o caminho de análise continua sem mapa — tanto a tela de

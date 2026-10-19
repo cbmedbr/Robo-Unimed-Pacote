@@ -11,6 +11,58 @@ import { executarSessao } from "./executar_sessao";
 import { DadosExecucao } from "./execucao/tipos";
 import { carregarConfig } from "./utils/config";
 import { logger } from "./utils/logger";
+import { InputAutorizacaoScSaude } from "./scsaude/tipos";
+import { carregarConfigScSaude } from "./scsaude/config";
+import { executarAutorizacaoScSaude } from "./scsaude/autorizacao";
+
+/**
+ * Autorização no SC Saúde.
+ *
+ * Um comando próprio, não uma variação do `autorizar`: os dois portais não se
+ * parecem e o input é diferente (o SC Saúde localiza o paciente por CPF, a
+ * Unimed por carteirinha). Quem escolhe o comando é o servidor, a partir do
+ * plano do paciente — a colaboradora abre o mesmo robô de sempre.
+ */
+async function comandoScSaude(inputPath: string): Promise<void> {
+  if (!fs.existsSync(inputPath)) {
+    logger.error({ inputPath }, "arquivo de input não encontrado");
+    process.exit(1);
+  }
+
+  let input: InputAutorizacaoScSaude;
+  try {
+    input = JSON.parse(fs.readFileSync(inputPath, "utf-8"));
+  } catch (err) {
+    logger.error({ err: (err as Error).message }, "falha ao ler/parsear JSON de input");
+    process.exit(1);
+  }
+
+  let config;
+  try {
+    config = carregarConfigScSaude();
+  } catch (err) {
+    // Credencial ausente é o caso esperado em máquina que não é a de teste.
+    // Sai com resultado legível em vez de stack trace.
+    console.log(
+      JSON.stringify(
+        {
+          sucesso: false,
+          erro_codigo: "CONFIG_AUSENTE",
+          erro_mensagem: (err as Error).message,
+        },
+        null,
+        2
+      )
+    );
+    process.exit(1);
+  }
+
+  logger.info({ paciente: input.paciente?.nome_completo }, "iniciando autorização SC Saúde");
+
+  const resultado = await executarAutorizacaoScSaude(input, config);
+  console.log(JSON.stringify(resultado, null, 2));
+  process.exit(resultado.sucesso ? 0 : 1);
+}
 
 async function comandoAutorizar(inputPath: string, dryRun: boolean): Promise<void> {
   if (!fs.existsSync(inputPath)) {
@@ -192,12 +244,25 @@ async function main() {
             describe: "Número da guia (pode repetir: --guia X --guia Y)",
           })
     )
+    .command(
+      "scsaude",
+      "Solicita autorização no portal do SC Saúde",
+      (y) =>
+        y.option("input", {
+          alias: "i",
+          type: "string",
+          describe: "Caminho para o arquivo JSON de input",
+          demandOption: true,
+        })
+    )
     .help()
     .parseAsync();
 
   const comando = argv._[0] as string | undefined;
 
-  if (comando === "executar-sessao") {
+  if (comando === "scsaude") {
+    await comandoScSaude((argv as any).input as string);
+  } else if (comando === "executar-sessao") {
     await comandoExecutarSessao((argv as any).input as string);
   } else if (comando === "verificar") {
     await comandoVerificar(
