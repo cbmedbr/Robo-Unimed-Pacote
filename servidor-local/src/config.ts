@@ -21,6 +21,21 @@ export const config = {
   supabaseServiceRoleKey: obrigatorio("SUPABASE_SERVICE_ROLE_KEY"),
   unimedUsuario: obrigatorio("UNIMED_USUARIO"),
   unimedSenha: obrigatorio("UNIMED_SENHA"),
+
+  // ---------------------------------------------------------------------
+  // SC Saúde — desligado por padrão
+  //
+  // O `iniciar.bat` puxa da main automaticamente, então manter o código numa
+  // branch não protegeria ninguém: no instante do merge, todas as máquinas
+  // recebem. O isolamento é em tempo de execução — só a máquina com
+  // SCSAUDE_HABILITADO=true no .env aceita job de SC Saúde.
+  //
+  // As credenciais são opcionais de propósito: a máquina que não opera SC
+  // Saúde não precisa tê-las, e o servidor não deve recusar a subir por isso.
+  // ---------------------------------------------------------------------
+  scsaudeHabilitado: opcional("SCSAUDE_HABILITADO", "false") === "true",
+  scsaudeUsuario: process.env.SCSAUDE_USUARIO ?? "",
+  scsaudeSenha: process.env.SCSAUDE_SENHA ?? "",
   roboCaminho: obrigatorio("ROBO_CAMINHO"),
   roboTimeoutMs: parseInt(opcional("ROBO_TIMEOUT_MS", "180000"), 10),
   roboHeadless: opcional("ROBO_HEADLESS", "false") === "true",

@@ -334,9 +334,17 @@ O isolamento tem que ser em tempo de execução:
 SCSAUDE_HABILITADO=true
 ```
 
-no `.env` **apenas** da máquina de teste. O servidor recusa job de SC Saúde sem essa variável, e
-nas demais máquinas o código fica inerte mesmo presente. Mesmo princípio do `SENHA_VERSAO.txt`:
-controle por máquina, não por branch.
+no `.env` **apenas** da máquina de teste. **Implementado em 19/10/2026**: o servidor recusa job
+de SC Saúde sem essa variável, com o erro `SCSAUDE_NAO_HABILITADO` e uma mensagem que diz o que
+fazer. Nas demais máquinas o código fica inerte mesmo presente. Mesmo princípio do
+`SENHA_VERSAO.txt`: controle por máquina, não por branch.
+
+Junto da variável vão `SCSAUDE_USUARIO` e `SCSAUDE_SENHA` — esta **entre aspas**, porque a
+senha contém `#`. Ambas são opcionais no servidor: a máquina que não opera SC Saúde não precisa
+tê-las, e o servidor não deixa de subir por isso.
+
+Quem decide o portal é o **plano do paciente**, em `operadora.ts`. Ninguém escolhe portal na
+tela: a colaboradora abre o mesmo `iniciar.bat` de sempre.
 
 ### O observador (ferramenta rodada à mão)
 

@@ -6,6 +6,43 @@
 
 ## 19/10/2026
 
+### Roteamento por operadora no servidor, com gate por máquina
+**Arquivos:** `servidor-local/src/operadora.ts` (novo), `servidor-local/src/scsaude-job.ts`
+(novo), `servidor-local/src/executor.ts`, `servidor-local/src/config.ts`, os dois
+`.env.example`
+
+O servidor passou a escolher o portal pelo **plano do paciente** (`plano_saude_nome_snapshot`),
+e a chamar o robô no subcomando certo: `autorizar` para Unimed, `scsaude` para SC Saúde.
+Quem opera abre o mesmo `iniciar.bat` e não escolhe nada.
+
+A comparação do plano é sem acento e sem caixa, porque os nomes no CRM variam ("SC Saúde",
+"SC SAUDE", "Plano SC Saúde Servidor"). Plano desconhecido cai em `unimed`, que é o caminho
+que o robô sempre fez.
+
+**Gate `SCSAUDE_HABILITADO`.** O `iniciar.bat` puxa da main automaticamente, então manter o
+código numa branch não protegeria ninguém — no instante do merge, todas as máquinas recebem.
+O isolamento é em tempo de execução: job de SC Saúde em máquina sem a variável é recusado com
+`SCSAUDE_NAO_HABILITADO` e uma mensagem que diz o que fazer, em vez de rodar sem credencial e
+falhar lá dentro com erro de login.
+
+`scsaude-job.ts` monta o input do portal a partir do job. O que muda em relação à Unimed:
+
+- **CPF em vez de carteirinha** — é por ele que o SC Saúde localiza o beneficiário. Job de
+  paciente sem CPF falha com `CPF_AUSENTE` antes de abrir navegador, dizendo o nome de quem
+  precisa de correção no cadastro.
+- **Outros códigos de procedimento**: `10101118` típica, `13107208` atípica. Psicopedagogia e
+  avaliação neuro não existem no SC Saúde e falham com `PROCEDIMENTO_SEM_EQUIVALENTE`.
+- **Contratado solicitante vai vazio**, porque a tabela `medicos` não guarda onde o médico
+  atende. O adaptador cai no fallback "consultório", que o SOP já prevê como caminho normal
+  para médico de fora.
+
+Os erros de preparo chegam ao CRM com o código próprio (`CPF_AUSENTE`, `CID_SEM_DESCRICAO`,
+`PEDIDO_MEDICO_AUSENTE`) em vez de caírem todos em `ERRO_PRE_EXECUCAO`.
+
+**Risco verificado:** o subcomando passou a ir explícito também para a Unimed, que roda ~190
+vezes por dia. Conferido que `autorizar --input` e `--input` sozinho produzem o mesmo
+resultado — `autorizar` já era o comando padrão no yargs.
+
 ### Adaptador de autorização do SC Saúde (primeira versão, atrás de gate)
 **Arquivos:** `unimed-mvp-final/src/scsaude/` (novo), `unimed-mvp-final/src/index.ts`
 

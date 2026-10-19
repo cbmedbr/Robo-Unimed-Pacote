@@ -15,6 +15,8 @@ import { fileURLToPath } from "node:url";
 import { config } from "./config.js";
 import { supabase } from "./supabase.js";
 import type { UnimedJob, InputAutorizacaoRobo, ResultadoRobo } from "./types.js";
+import { operadoraDoJob, COMANDO_POR_OPERADORA, type Operadora } from "./operadora.js";
+import { jobParaInputScSaude, ErroPreparoScSaude } from "./scsaude-job.js";
 
 const PASTA_TEMP = path.join(os.tmpdir(), "unimed-jobs");
 const PASTA_DUMPS = path.join(os.tmpdir(), "unimed-dumps");
@@ -340,17 +342,34 @@ export async function executarJob(jobId: string): Promise<void> {
   let resultado: ResultadoRobo;
 
   try {
-    // 3. Converte job → input do robô
-    const { input, pdfLocalPath } = await jobParaInputRobo(job);
+    // 3. Qual portal este job usa. Sai do plano do paciente — ninguém
+    //    escolhe portal na tela.
+    const operadora = operadoraDoJob(job);
 
-    // 4. Salva input em arquivo JSON temporário
+    if (operadora === "scsaude" && !config.scsaudeHabilitado) {
+      // O código de SC Saúde chega em todas as máquinas pelo git pull, mas
+      // só opera onde o .env libera. Recusar aqui, com mensagem clara, é
+      // melhor do que deixar rodar num lugar sem credencial e falhar lá
+      // dentro com erro de login.
+      throw new Error(
+        "SCSAUDE_NAO_HABILITADO: este computador não está liberado para o SC Saúde. " +
+          "O robô de SC Saúde ainda está em teste numa máquina só — " +
+          "peça para quem cuida do robô rodar este job por lá."
+      );
+    }
+
+    // 4. Converte job → input do robô do portal certo
+    const { input, pdfLocalPath } =
+      operadora === "scsaude" ? await jobParaInputScSaude(job) : await jobParaInputRobo(job);
+
+    // 5. Salva input em arquivo JSON temporário
     const inputPath = path.join(PASTA_TEMP, `${jobId}-input.json`);
     await fs.writeFile(inputPath, JSON.stringify(input, null, 2));
 
-    // 5. Executa o robô como subprocesso
-    resultado = await rodarSubprocesso(jobId, inputPath);
+    // 6. Executa o robô como subprocesso, no subcomando da operadora
+    resultado = await rodarSubprocesso(jobId, inputPath, operadora);
 
-    // 6. Limpa arquivos temporários
+    // 7. Limpa arquivos temporários
     try {
       await fs.unlink(inputPath);
       await fs.unlink(pdfLocalPath);
@@ -366,15 +385,18 @@ export async function executarJob(jobId: string): Promise<void> {
     // não diz o que corrigir.
     const prefixo = /^([A-Z][A-Z0-9_]{4,}):/.exec(mensagem);
 
+    // O preparo do SC Saude carrega o codigo numa propriedade, nao no texto.
+    const codigoPreparo = e instanceof ErroPreparoScSaude ? e.codigo : null;
+
     resultado = {
       sucesso: false,
-      erro_codigo: prefixo ? prefixo[1] : "ERRO_PRE_EXECUCAO",
+      erro_codigo: codigoPreparo ?? (prefixo ? prefixo[1] : "ERRO_PRE_EXECUCAO"),
       erro_mensagem: mensagem,
       duracao_ms: Date.now() - inicioMs,
     };
   }
 
-  // 7. Atualiza job no banco com resultado
+  // 8. Atualiza job no banco com resultado
   await atualizarJobComResultado(jobId, job, resultado);
 }
 
@@ -382,7 +404,11 @@ export async function executarJob(jobId: string): Promise<void> {
 // Subprocesso do robô
 // ============================================================================
 
-function rodarSubprocesso(jobId: string, inputPath: string): Promise<ResultadoRobo> {
+function rodarSubprocesso(
+  jobId: string,
+  inputPath: string,
+  operadora: Operadora = "unimed"
+): Promise<ResultadoRobo> {
   return new Promise((resolve) => {
     const inicioMs = Date.now();
     let stdoutTotal = "";
@@ -405,15 +431,23 @@ function rodarSubprocesso(jobId: string, inputPath: string): Promise<ResultadoRo
     // reportado como ROBO_FALHOU, sem pista da causa.
     const tsxCli = fileURLToPath(new URL("../node_modules/tsx/dist/cli.mjs", import.meta.url));
     const scriptPath = config.roboCaminho + "/src/index.ts";
+    // O subcomando vai explícito mesmo para a Unimed (onde `autorizar` é o
+    // padrão): assim o comando no log diz qual portal foi usado, sem deduzir.
+    const comando = COMANDO_POR_OPERADORA[operadora];
+
     const proc = spawn(
       process.execPath,
-      [tsxCli, scriptPath, "--input", inputPath],
+      [tsxCli, scriptPath, comando, "--input", inputPath],
       {
         cwd: config.roboCaminho,
         env: {
           ...process.env,
           UNIMED_USUARIO: config.unimedUsuario,
           UNIMED_SENHA: config.unimedSenha,
+          // Só vão quando a máquina tem: o robô recusa com CONFIG_AUSENTE e
+          // mensagem legível se faltarem.
+          ...(config.scsaudeUsuario ? { SCSAUDE_USUARIO: config.scsaudeUsuario } : {}),
+          ...(config.scsaudeSenha ? { SCSAUDE_SENHA: config.scsaudeSenha } : {}),
           HEADLESS: config.roboHeadless ? "true" : "false",
         },
       }
