@@ -346,6 +346,19 @@ tê-las, e o servidor não deixa de subir por isso.
 Quem decide o portal é o **plano do paciente**, em `operadora.ts`. Ninguém escolhe portal na
 tela: a colaboradora abre o mesmo `iniciar.bat` de sempre.
 
+### Como ligar numa máquina
+
+Rodar **`configurar-scsaude.bat`** nela, e digitar usuário e senha quando pedir. O script grava
+nos dois `.env`, resolve as duas armadilhas que já nos custaram incidentes — **UTF-8 sem BOM**
+(com BOM o dotenv ignora a primeira variável) e **aspas na senha** (sem elas o `#` corta o valor)
+— e é idempotente: rodar de novo sobrescreve em vez de duplicar linha.
+
+Para desligar: `configurar-scsaude.ps1 -Desligar`. As credenciais ficam guardadas e inativas,
+para religar sem redigitar.
+
+Existe para ninguém precisar editar o `.env` no Bloco de Notas — foi assim que uma vez um `ã`
+corrompido no `ROBO_CAMINHO` derrubou o robô de uma máquina inteira.
+
 ### O observador (ferramenta rodada à mão)
 
 Aqui não é preciso gate nenhum. `observar-scsaude.bat` e `unimed-mvp-final/observar-scsaude.ts`
