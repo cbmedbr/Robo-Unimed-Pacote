@@ -458,7 +458,36 @@ casos a lista foi:
 
 ---
 
-## 10. O que ainda falta
+## 10. Execução de sessão — no escopo, sem mapa
+
+**Decidido em 19/10/2026: a clínica vai executar sessão no SC Saúde também**, como já faz na
+Unimed. Isso dobra o escopo do robô: além de pedir a autorização, ele terá que registrar a
+sessão realizada.
+
+O que já se sabe, pelo texto do próprio portal no topo da guia de SADT:
+
+> *"Clicando em GERAR GUIA, a guia será criada, capturada e incluída em **MEUS ATENDIMENTOS**.
+> Lá você poderá visualizar os detalhes da guia e **executá-la**."*
+
+Então a porta de entrada é **Atendimento → Atendimentos → Meus Atendimentos**, e não o caminho
+de *Novo* usado na autorização. O status  da seção 6 é o destino.
+
+**Nada além disso está mapeado.** Os dumps de reconhecimento () pararam na tela
+de novo atendimento, e as 46 capturas de 16/10 cobrem só a autorização. Faltam:
+
+- como localizar a guia em *Meus Atendimentos* (filtros, busca)
+- a tela da guia aberta e onde se informa a data da sessão realizada
+- se existe confirmação (como o "Finalizar Parcial → Confirmar" da Unimed) e qual o texto dela
+- a tela de sucesso e o que ela devolve
+- se há token/validação do beneficiário, como o QR Code da Unimed
+
+O caminho para levantar isso é o mesmo que funcionou em 16/10: **a colaboradora executa uma
+sessão real e manda as capturas**. Não depende do adaptador de autorização e pode correr em
+paralelo com ele.
+
+---
+
+## 11. O que ainda falta
 
 1. **A guia que fica EM ANÁLISE.** Nas duas autorizações reais o resultado foi *Guia
    Autorizada* na hora, então o caminho de análise continua sem mapa — tanto a tela de
