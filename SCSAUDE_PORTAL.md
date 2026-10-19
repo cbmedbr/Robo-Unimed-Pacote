@@ -353,21 +353,119 @@ então essa pasta nunca pode ser commitada nem publicada; vai compactada, por ca
 
 ---
 
-## 9. O que falta
+## 9. Depois de enviar: alertas, resultado e captura
 
-O caminho feliz está mapeado do login até o **formulário preenchido**, com um caso real, e o
-modal de anexo também. O que resta são as telas que **só aparecem depois de enviar uma
-solicitação** — que o reconhecimento somente-leitura não alcança:
+> Mapeado em 16/10/2026 a partir de **duas autorizações reais** feitas à mão pela
+> colaboradora que opera o portal, com 46 capturas de tela. Os prints ficam em
+> `unimed-mvp-final/screenshots/` — pasta coberta pelo `.gitignore`, porque tem nome e
+> carteirinha de paciente. Portal na versão **4.56.5**.
 
-1. Os alertas: "A guia solicitada possui alertas" e o pedido de telefone/e-mail
-2. As telas de resultado: Guia Autorizada e Guia em Análise
-3. A tela de captura de uma guia que ficou em análise
+### 9.1 A sequência
 
-Para as três, o caminho é a colaboradora que opera o portal fazer uma autorização real com o
-observador ligado (seção 8) e mandar os dumps.
+```
+formulário preenchido
+   └─ clica  Solicitar Autorização        (ícone no canto direito da barra)
+        ├─ modal  Alertas                 → botão "OK, entendi"      (quando há alerta)
+        └─ modal  Resultado da Autorização
+             ├─ "Guia Autorizada"         → botão "Finalizar e Gerar a Guia"
+             └─ "Visualizar Pendências/Alterar Solicitação"  (volta ao formulário)
+                  └─ tela  Guia Capturada  ← número da guia, senha e validade
+```
 
-Além disso, antes de escrever o adaptador:
+O cabeçalho da página acompanha o estado, e é o sinal mais confiável de onde se está:
 
-4. Decidir como o CRM identifica um job como SC Saúde e roteia
-5. Ensinar o CRM a regra de quantidade por mês
-6. Auditar as carteirinhas de SC Saúde no CRM
+| Faixa no topo | Significa |
+|---|---|
+| `⚙ Guia com Pendência` (amarela) | ainda não foi autorizada |
+| `✔ Guia Autorizada` (verde) | autorização saiu, falta gerar a guia |
+| `☑ Guia Capturada` (azul) | terminou — guia existe e está em *Meus Atendimentos* |
+
+O ícone **Gerar Guia** na barra começa cinza (desabilitado) e só acende depois que a
+autorização sai. Serve como segundo sinal de que a guia foi autorizada.
+
+### 9.2 Modal "Alertas"
+
+Título **Alertas**, texto *"A guia solicitada possui alertas."* e uma tabela com
+**Pendência | Descrição | Observação**. Fecha em **"OK, entendi"**.
+
+Alerta não impede a autorização — nos dois casos reais a guia foi autorizada mesmo com
+alerta. Os que apareceram:
+
+| Código | Texto |
+|---|---|
+| `SCAUT_0152` | *O item solicitado possui Diretriz de Utilização conforme Edital vigente. Favor atentar-se* |
+| `SCAUT_0155` | *Prezado prestador, a quantidade solicitada está acima do permitido por período.* |
+
+O `SCAUT_0155` saiu com **quantidade 4** — então o limite por período do SC Saúde é menor
+do que a conta que usamos. **Confirmar o número certo com a operadora antes de o robô pedir
+sozinho**, senão todo pedido nasce com alerta.
+
+### 9.3 Tela "Guia Capturada"
+
+É o equivalente à tela de sucesso da Unimed, e é de onde sai tudo que o CRM precisa gravar:
+
+| Campo | Exemplo |
+|---|---|
+| Beneficiário | `<carteirinha 17 dígitos>  <NOME DO PACIENTE>` |
+| Convênio | SC Saúde |
+| **Número da Guia** | 8 dígitos |
+| **Senha** | 8 dígitos |
+| **Validade da Senha** | `15/12/2026` |
+| Data da Solicitação | `16/10/2026` |
+| Tipo | SADT |
+
+> Valores reais omitidos: este repositório é público. Os prints originais, com os dados,
+> estão na pasta ignorada pelo git.
+
+Ações disponíveis: **Imprimir** e **Solicitação Completa**. O título da página é
+`SADT — Resumo da Solicitação`.
+
+A validade saiu em **15/12** para uma solicitação de **16/10**: dois meses, não o dia 7 do
+mês seguinte como na Unimed. É outra regra de validade, e o CRM precisa saber disso.
+
+### 9.4 "Guia com Pendência" e o reprocessamento
+
+Quando a guia é alterada depois de uma tentativa, aparece a faixa amarela
+`⚙ Guia com Pendência` e, abaixo, uma tarja laranja: **"Guia alterada. Por favor reprocesse
+a guia."** O caminho é clicar de novo em *Solicitar Autorização* — cujo tooltip, nesse
+estado, é *"Processar autorização da guia"*.
+
+### 9.5 Documentos necessários
+
+Acima de *Detalhes Guia* existe um bloco **Documentos Necessários** listando o que a
+operadora exige, com um ícone de clipe por linha e um link *Abrir todos anexos*. Nos dois
+casos a lista foi:
+
+```
+1. Pedido Médico com Justificativa técnica
+```
+
+### 9.6 O que os casos reais revelaram sobre o preenchimento
+
+- **Indicação clínica:** a colaboradora digitou só `f41.1`, em minúscula. O campo aceita.
+  Para o robô vale a mesma regra da Unimed (`CID <código> <descrição>`), mas registre que o
+  portal não valida formato.
+- **CBOS:** veio `Médico clinico`.
+- **Nome do Contratado Solicitante:** `CONSULTORIO MEDICO` — confirma a cadeia de fallback
+  já mapeada na seção 2.
+- **Procedimento:** `22 - TUSS`, código `10101118`,
+  *Sessao de Psicoterapia / Psicologo - (12 ou ate 40 por ano se cumprir diretriz)*.
+
+---
+
+## 10. O que ainda falta
+
+1. **A guia que fica EM ANÁLISE.** Nas duas autorizações reais o resultado foi *Guia
+   Autorizada* na hora, então o caminho de análise continua sem mapa — tanto a tela de
+   resultado quanto a captura posterior. É o que falta para o robô saber esperar em vez de
+   tratar como falha.
+2. **O pedido de telefone/e-mail**, citado no documento original da operação, não apareceu
+   em nenhuma das duas. Pode ter deixado de existir, ou depender do paciente.
+3. **A quantidade permitida por período** — ver `SCAUT_0155` na seção 9.2.
+4. **A regra de validade da senha** (saiu em 2 meses; confirmar se é sempre assim).
+
+Antes de escrever o adaptador:
+
+5. Decidir como o CRM identifica um job como SC Saúde e roteia
+6. Ensinar o CRM a regra de quantidade por mês
+7. Auditar as carteirinhas de SC Saúde no CRM
