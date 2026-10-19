@@ -470,9 +470,9 @@ O que já se sabe, pelo texto do próprio portal no topo da guia de SADT:
 > Lá você poderá visualizar os detalhes da guia e **executá-la**."*
 
 Então a porta de entrada é **Atendimento → Atendimentos → Meus Atendimentos**, e não o caminho
-de *Novo* usado na autorização. O status  da seção 6 é o destino.
+de *Novo* usado na autorização. O status `Executada` da seção 6 é o destino.
 
-**Nada além disso está mapeado.** Os dumps de reconhecimento () pararam na tela
+**Nada além disso está mapeado.** Os dumps de reconhecimento (`recon-scsaude/`) pararam na tela
 de novo atendimento, e as 46 capturas de 16/10 cobrem só a autorização. Faltam:
 
 - como localizar a guia em *Meus Atendimentos* (filtros, busca)
