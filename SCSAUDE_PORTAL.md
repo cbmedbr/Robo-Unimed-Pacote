@@ -279,6 +279,11 @@ São os meses de 30 dias mais fevereiro contra os de 31 — ou seja, é uma cont
 
 Atípicas: 5, ou conforme o pedido médico quando for 2× por semana.
 
+> **A SC Saúde libera apenas a quantidade exata para UM mês de terapia** (confirmado pela
+> operação em 19/10/2026). Não existe pedir cobertura "até o dia 7 do mês seguinte" como na
+> Unimed: a janela é o mês, e pedir acima disso dispara a crítica `SCAUT_0155` (seção 9.2).
+> É a diferença de regra mais importante entre as duas operadoras, e ela vive no CRM.
+
 > **Quem calcula é o CRM**, não o robô (decidido em 29/09/2026). É a mesma regra adotada para a
 > Unimed em 22/09: o robô digita o que recebe e não recalcula nada. Ter dois donos da mesma
 > decisão foi o que produziu os bugs de agosto.
@@ -461,7 +466,9 @@ casos a lista foi:
    tratar como falha.
 2. **O pedido de telefone/e-mail**, citado no documento original da operação, não apareceu
    em nenhuma das duas. Pode ter deixado de existir, ou depender do paciente.
-3. **A quantidade permitida por período** — ver `SCAUT_0155` na seção 9.2.
+3. **Por que a crítica `SCAUT_0155` disparou com quantidade 4**, se a regra é um mês de
+   terapia (seção 5). Pode ser guia ainda ativa no período, ou a diretriz de utilização do
+   procedimento. Vale perguntar à operadora — sem isso o robô vai gerar alerta em todo pedido.
 4. **A regra de validade da senha** (saiu em 2 meses; confirmar se é sempre assim).
 
 Antes de escrever o adaptador:
