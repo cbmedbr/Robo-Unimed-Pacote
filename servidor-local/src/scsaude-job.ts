@@ -14,10 +14,18 @@ import type { UnimedJob } from "./types.js";
 
 const PASTA_TEMP = path.join(os.tmpdir(), "unimed-jobs");
 
-/** Procedimento no SC Saúde, por categoria do CRM. */
+/**
+ * Procedimento no SC Saúde, por categoria do CRM.
+ *
+ * A chave é o valor do enum `categoria_atendimento_tipo` do banco. **A sessão
+ * atípica se chama `aba`** — escrevi `atipico` na primeira versão, que é como
+ * o SOP fala dela, e nenhum job teria casado: os 280 jobs atípicos desde
+ * agosto falhariam com PROCEDIMENTO_SEM_EQUIVALENTE. O nome do SOP e o nome do
+ * enum são diferentes, e quem manda aqui é o enum.
+ */
 const PROCEDIMENTO_SCSAUDE: Record<string, string> = {
   tipico: "10101118",
-  atipico: "13107208",
+  aba: "13107208",
 };
 
 export class ErroPreparoScSaude extends Error {

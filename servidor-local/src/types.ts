@@ -16,7 +16,21 @@ export interface UnimedJob {
   medico_uf_snapshot: string;
   cid_snapshot: string;
   procedimento_codigo: "50000470" | "2250005103" | "2250005278" | "2250005367";
-  procedimento_categoria?: "tipico" | "atipico" | "psicopedagogia" | "avaliacao_neuro" | null;
+  /**
+   * Categoria do procedimento, como o enum `categoria_atendimento_tipo` do
+   * banco a nomeia. **A sessão atípica se chama `aba` aqui** — o tipo dizia
+   * "atipico", que não existe no banco e fazia qualquer comparação com essa
+   * categoria falhar calada. Valores reais vistos em produção: `tipico`
+   * (3002 jobs), `aba` (280), `psicopedagogia` (6), `avaliacao_neuro` (3).
+   */
+  procedimento_categoria?:
+    | "tipico"
+    | "aba"
+    | "psicopedagogia"
+    | "avaliacao_neuro"
+    | "neuropsicologia"
+    | "sem_definicao"
+    | null;
   /** Quantidade a digitar em NR_QTD_1. Desde 22/09/2026 varia (5, 9, 13…) — o CRM calcula. */
   procedimento_quantidade: number;
   pedido_medico_path_snapshot: string;
