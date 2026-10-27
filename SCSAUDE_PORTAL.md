@@ -305,17 +305,21 @@ Atípicas: 5, ou conforme o pedido médico quando for 2× por semana.
 Lidas direto do filtro de situação do portal em 27/10/2026 — são mais do que o documento da
 operação dizia:
 
-| Situação |
-|---|
-| Autorizado |
-| Parcialmente Autorizado |
-| **Em análise** |
-| **Aguardando justificativa técnica do solicitante** |
-| **Aguardando documentação do prestador** |
-| **Aguardando retorno do prestador** |
-| **Perícia** |
-| Negado |
-| Cancelado |
+| Código interno | Rótulo na tela |
+|---|---|
+| `AUTORIZADO` | Autorizado |
+| `AUTORIZADO_PARCIALMENTE` | Parcialmente Autorizado |
+| `EM_ANALISE` | **Em análise** |
+| `AGUARDANDO_JUSTIFICATIVA` | **Aguardando justificativa técnica do solicitante** |
+| `AGUARDANDO_DOCUMENTACAO` | **Aguardando documentação do prestador** |
+| `AGUARDANDO_RETORNO` | **Aguardando retorno do prestador** |
+| `PERICIA` | **Perícia** |
+| `NEGADO` | Negado |
+| `CANCELADA` | Cancelado |
+
+> **Use o código, não o rótulo.** Os códigos saem do `value` dos checkboxes do filtro de
+> situação e não mudam com tradução, acento ou ajuste de texto. O rótulo muda; o código não.
+> Repare que "Cancelado" na tela é `CANCELADA` no código — eles nem concordam em gênero.
 
 As quatro em negrito não estavam mapeadas. **Três delas são pedidos de ação**, não espera:
 a guia parou porque falta alguma coisa do nosso lado. Tratar tudo como "em análise" faria o
@@ -350,6 +354,24 @@ A situação é um `<select>` com id gerado pelo JSF (`form-filtros:j_idt257` nu
 operadora mexe no layout. Para o robô, selecionar pela opção ("Em análise") e não pelo id.
 
 Botões: **Pesquisar** e **Limpar**.
+
+### Três armadilhas destas telas
+
+Todas encontradas na prática, tentando rastrear uma guia em análise:
+
+1. **O período vem limitado aos últimos 7 dias.** `inicio-data-solicitacao` e
+   `fim-data-solicitacao` chegam preenchidos com a semana corrente. Quem não alargar recebe
+   *"Nenhum registro encontrado"* e conclui que não há guias — quando só não houve naquela
+   semana.
+
+2. **A situação não é um `<select>`.** É um grupo de checkboxes numa tabela de classe
+   `vb_checkbox_status_guia`. O `value` de cada um é o código interno (`EM_ANALISE`), que é o
+   seletor estável. O input em si fica escondido atrás do rótulo estilizado (`vd_checkbox`),
+   então marcar exige clicar no `<label>`, não no `<input>`.
+
+3. **O botão Pesquisar tem `col-sm-0`** — largura zero no desktop. O Playwright recusa clicar
+   no que não tem área, e o erro sai como timeout genérico, sem dizer que o problema é
+   layout. Rolar até ele e disparar o clique pelo DOM resolve.
 
 ---
 
