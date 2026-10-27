@@ -359,10 +359,19 @@ Botões: **Pesquisar** e **Limpar**.
 
 Todas encontradas na prática, tentando rastrear uma guia em análise:
 
-1. **O período vem limitado aos últimos 7 dias.** `inicio-data-solicitacao` e
-   `fim-data-solicitacao` chegam preenchidos com a semana corrente. Quem não alargar recebe
-   *"Nenhum registro encontrado"* e conclui que não há guias — quando só não houve naquela
-   semana.
+1. **O período vem limitado aos últimos 7 dias, e resiste à automação.**
+   `inicio-data-solicitacao` e `fim-data-solicitacao` chegam preenchidos com a semana
+   corrente. Quem não alargar recebe *"Nenhum registro encontrado"* e conclui que não há
+   guias — quando só não houve naquela semana.
+
+   **E alargar pela automação não funcionou.** Em 27/10/2026 tentamos três caminhos:
+   `page.fill()`, digitação caractere a caractere (`pressSequentially`) e `Escape` para
+   fechar o date picker. Nos três o campo **voltou sozinho** para a janela padrão antes da
+   busca rodar. O valor é reimposto numa re-renderização do JSF.
+
+   Quem for automatizar a varredura de guias precisa resolver isso primeiro — provavelmente
+   usando o date picker como usuário (clicar no calendário) em vez de escrever no campo, ou
+   indo pelos endpoints REST. **Não existe atalho por `fill()` aqui.**
 
 2. **A situação não é um `<select>`.** É um grupo de checkboxes numa tabela de classe
    `vb_checkbox_status_guia`. O `value` de cada um é o código interno (`EM_ANALISE`), que é o
@@ -608,6 +617,15 @@ paralelo com ele.
 ---
 
 ## 13. O que ainda falta
+
+> **Sobre a guia em análise:** em 27/10/2026 tentamos rastrear uma pelo portal e não
+> conseguimos — não porque o portal esconda, mas pela armadilha 1 da seção 7 (o filtro de
+> data volta sozinho). Fica registrada uma hipótese a confirmar: **talvez não exista nenhuma**.
+> As duas autorizações reais de 16/10 saíram **autorizadas na hora**, e o procedimento de
+> psicoterapia pode ser de liberação automática no SC Saúde. Se for esse o caso, o caminho
+> de análise é raro e o robô pode tratá-lo como exceção para humano em vez de fluxo a
+> automatizar.
+
 
 1. **A guia que fica EM ANÁLISE.** Nas duas autorizações reais o resultado foi *Guia
    Autorizada* na hora, então o caminho de análise continua sem mapa — tanto a tela de
