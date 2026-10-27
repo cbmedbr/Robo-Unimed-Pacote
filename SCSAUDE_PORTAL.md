@@ -281,7 +281,7 @@ Atípicas: 5, ou conforme o pedido médico quando for 2× por semana.
 
 > **A SC Saúde libera apenas a quantidade exata para UM mês de terapia** (confirmado pela
 > operação em 19/10/2026). Não existe pedir cobertura "até o dia 7 do mês seguinte" como na
-> Unimed: a janela é o mês, e pedir acima disso dispara a crítica `SCAUT_0155` (seção 9.2).
+> Unimed: a janela é o mês, e pedir acima disso dispara a crítica `SCAUT_0155` (seção 10.2).
 > É a diferença de regra mais importante entre as duas operadoras, e ela vive no CRM.
 
 > **Quem calcula é o CRM**, não o robô (decidido em 29/09/2026). É a mesma regra adotada para a
@@ -430,7 +430,7 @@ então essa pasta nunca pode ser commitada nem publicada; vai compactada, por ca
 > `unimed-mvp-final/screenshots/` — pasta coberta pelo `.gitignore`, porque tem nome e
 > carteirinha de paciente. Portal na versão **4.56.5**.
 
-### 9.1 A sequência
+### 10.1 A sequência
 
 ```
 formulário preenchido
@@ -453,7 +453,7 @@ O cabeçalho da página acompanha o estado, e é o sinal mais confiável de onde
 O ícone **Gerar Guia** na barra começa cinza (desabilitado) e só acende depois que a
 autorização sai. Serve como segundo sinal de que a guia foi autorizada.
 
-### 9.2 Modal "Alertas"
+### 10.2 Modal "Alertas"
 
 Título **Alertas**, texto *"A guia solicitada possui alertas."* e uma tabela com
 **Pendência | Descrição | Observação**. Fecha em **"OK, entendi"**.
@@ -470,7 +470,7 @@ O `SCAUT_0155` saiu com **quantidade 4** — então o limite por período do SC 
 do que a conta que usamos. **Confirmar o número certo com a operadora antes de o robô pedir
 sozinho**, senão todo pedido nasce com alerta.
 
-### 9.3 Tela "Guia Capturada"
+### 10.3 Tela "Guia Capturada"
 
 É o equivalente à tela de sucesso da Unimed, e é de onde sai tudo que o CRM precisa gravar:
 
@@ -493,14 +493,14 @@ Ações disponíveis: **Imprimir** e **Solicitação Completa**. O título da p�
 A validade saiu em **15/12** para uma solicitação de **16/10**: dois meses, não o dia 7 do
 mês seguinte como na Unimed. É outra regra de validade, e o CRM precisa saber disso.
 
-### 9.4 "Guia com Pendência" e o reprocessamento
+### 10.4 "Guia com Pendência" e o reprocessamento
 
 Quando a guia é alterada depois de uma tentativa, aparece a faixa amarela
 `⚙ Guia com Pendência` e, abaixo, uma tarja laranja: **"Guia alterada. Por favor reprocesse
 a guia."** O caminho é clicar de novo em *Solicitar Autorização* — cujo tooltip, nesse
 estado, é *"Processar autorização da guia"*.
 
-### 9.5 Documentos necessários
+### 10.5 Documentos necessários
 
 Acima de *Detalhes Guia* existe um bloco **Documentos Necessários** listando o que a
 operadora exige, com um ícone de clipe por linha e um link *Abrir todos anexos*. Nos dois
@@ -510,7 +510,7 @@ casos a lista foi:
 1. Pedido Médico com Justificativa técnica
 ```
 
-### 9.6 O que os casos reais revelaram sobre o preenchimento
+### 10.6 O que os casos reais revelaram sobre o preenchimento
 
 - **Indicação clínica:** a colaboradora digitou só `f41.1`, em minúscula. O campo aceita.
   Para o robô vale a mesma regra da Unimed (`CID <código> <descrição>`), mas registre que o
