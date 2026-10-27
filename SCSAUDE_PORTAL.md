@@ -321,6 +321,20 @@ operação dizia:
 > situação e não mudam com tradução, acento ou ajuste de texto. O rótulo muda; o código não.
 > Repare que "Cancelado" na tela é `CANCELADA` no código — eles nem concordam em gênero.
 
+**As duas telas não oferecem as mesmas situações.** *Solicitações e Encaminhamentos* filtra por
+nove; *Meus Atendimentos* filtra por **treze** — as nove acima mais:
+
+| Só em Meus Atendimentos | O que significa |
+|---|---|
+| Executado | a sessão já foi registrada na guia |
+| Capturada | a clínica assumiu a guia |
+| Bloqueada | — a confirmar |
+| Alerta | — a confirmar |
+
+Faz sentido: *Encaminhados* lista o que está pendente de decisão da operadora, então não tem
+estado de execução. **Para acompanhar o ciclo de vida da guia, a tela certa é Meus
+Atendimentos.**
+
 As quatro em negrito não estavam mapeadas. **Três delas são pedidos de ação**, não espera:
 a guia parou porque falta alguma coisa do nosso lado. Tratar tudo como "em análise" faria o
 robô esperar por algo que nunca vem sozinho.
@@ -347,7 +361,21 @@ form-filtros:inicio-data-validade:value      form-filtros:fim-data-validade:valu
 form-filtros:carteira-filtro:value           form-filtros:beneficiario-filtro:value
 ```
 
-*Meus Atendimentos* tem ainda `inicio-data-digitacao` / `fim-data-digitacao`.
+*Meus Atendimentos* tem um filtro bem mais completo, visto na tela em 27/10/2026:
+
+```
+Data da Solicitação (início/fim)    Data de Validade (início/fim)
+Data da Digitação (início/fim)      Convênio (já vem em SC Saúde)
+Número Carteira                     Beneficiário
+Número Guia                         Tipo Atendimento
+Número Guia Principal               Guias com Intercorrência (Todos/Sim/Não)
+Situação da Guia (13 checkboxes)
+```
+
+A tabela de resultados tem as colunas **Nº Guia · Data Solicitação · Tipo · Situação**, e o
+número da guia é link para os detalhes. Há ainda uma tabela de procedimentos com
+**Tabela · Código · Descrição · Qtd. Autorizada · Qtd. Executada** — é dela que sai o saldo
+da guia.
 
 A situação é um `<select>` com id gerado pelo JSF (`form-filtros:j_idt257` numa tela,
 `j_idt270` na outra). **Esse id não é estável** — é contagem de componente, muda quando a
@@ -355,7 +383,7 @@ operadora mexe no layout. Para o robô, selecionar pela opção ("Em análise") 
 
 Botões: **Pesquisar** e **Limpar**.
 
-### Três armadilhas destas telas
+### Quatro armadilhas destas telas
 
 Todas encontradas na prática, tentando rastrear uma guia em análise:
 
@@ -369,16 +397,27 @@ Todas encontradas na prática, tentando rastrear uma guia em análise:
    fechar o date picker. Nos três o campo **voltou sozinho** para a janela padrão antes da
    busca rodar. O valor é reimposto numa re-renderização do JSF.
 
-   Quem for automatizar a varredura de guias precisa resolver isso primeiro — provavelmente
-   usando o date picker como usuário (clicar no calendário) em vez de escrever no campo, ou
-   indo pelos endpoints REST. **Não existe atalho por `fill()` aqui.**
+   **Resolvido em 27/10/2026:** os campos são jQuery UI datepicker (classe `hasDatepicker`),
+   e escrever no input não atualiza o estado interno do widget, que reimpõe o valor. A forma
+   que funciona é usar a API do próprio widget:
+
+   ```js
+   const $ = window.jQuery;
+   const campo = $("#form-filtros\\:inicio-data-solicitacao\\:value");
+   campo.datepicker("setDate", new Date(2026, 9, 1));
+   campo.trigger("change");   // sem isto o JSF não enxerga o valor novo
+   ```
 
 2. **A situação não é um `<select>`.** É um grupo de checkboxes numa tabela de classe
    `vb_checkbox_status_guia`. O `value` de cada um é o código interno (`EM_ANALISE`), que é o
    seletor estável. O input em si fica escondido atrás do rótulo estilizado (`vd_checkbox`),
    então marcar exige clicar no `<label>`, não no `<input>`.
 
-3. **O botão Pesquisar tem `col-sm-0`** — largura zero no desktop. O Playwright recusa clicar
+3. **Período largo derruba a busca.** Com 01/01 a 27/10 o portal respondeu
+   *"O servidor apresentou problemas ao realizar a requisição"* — um alerta vermelho no canto,
+   fácil de não notar, e a lista fica vazia como se não houvesse guias. Buscar **mês a mês**.
+
+4. **O botão Pesquisar tem `col-sm-0`** — largura zero no desktop. O Playwright recusa clicar
    no que não tem área, e o erro sai como timeout genérico, sem dizer que o problema é
    layout. Rolar até ele e disparar o clique pelo DOM resolve.
 
