@@ -20,12 +20,108 @@ import { fecharInformativos } from "./portal";
  * de reconhecer a tela. O texto da faixa é o que a operadora precisa manter,
  * porque é o que a pessoa lê.
  */
+/**
+ * Modo conferência: para antes de solicitar e espera a pessoa decidir.
+ *
+ * Decidido pela operação em 27/10/2026. Emitir autorização é **irreversível**:
+ * um dado errado só aparece quando a guia já existe no portal da operadora, e
+ * aí o conserto é manual e caro. O robô faz o trabalho chato — achar o
+ * paciente, o médico, o contratado, digitar e anexar — e devolve a decisão de
+ * enviar para quem responde por ela.
+ *
+ * Depois que a pessoa clica, o robô volta a trabalhar: lê o resultado e a tela
+ * de Guia Capturada, para o CRM não ficar sem o número, a senha e a validade.
+ */
+async function aguardarConferenciaHumana(
+  page: Page,
+  config: ConfigScSaude,
+  jobId: string
+): Promise<ResultadoScSaude> {
+  const minutos = Math.round(config.esperaConferenciaMs / 60000);
+
+  console.log(`
+============================================================
+  GUIA PREENCHIDA — FALTA VOCE CONFERIR
+
+  O robo preencheu tudo e PAROU de proposito. Nada foi
+  enviado para o SC Saude ainda.
+
+  1. Confira os dados na tela.
+  2. Se estiver certo, clique em SOLICITAR AUTORIZACAO.
+  3. Siga ate o fim (Finalizar e Gerar a Guia).
+
+  O robo espera ${minutos} minutos e, assim que a guia sair,
+  anota sozinho o numero, a senha e a validade no sistema.
+
+  Se algo estiver errado, basta fechar a janela: nada foi
+  enviado e nenhuma guia foi criada.
+============================================================
+`);
+
+  logger.info({ jobId, esperaMs: config.esperaConferenciaMs }, "aguardando conferência humana");
+
+  const inicio = Date.now();
+
+  while (Date.now() - inicio < config.esperaConferenciaMs) {
+    if (page.isClosed()) {
+      return {
+        sucesso: false,
+        situacao: "AGUARDANDO_CONFERENCIA",
+        erro_codigo: "CONFERENCIA_CANCELADA",
+        erro_mensagem:
+          "A janela foi fechada durante a conferência. Nada foi enviado ao SC Saúde e nenhuma " +
+          "guia foi criada — o pedido pode ser refeito sem risco de duplicidade.",
+      };
+    }
+
+    const texto = (await page.evaluate(() => document.body?.innerText ?? "").catch(() => "")).replace(
+      /\s+/g,
+      " "
+    );
+
+    if (/Guia\s+Capturada/i.test(texto)) {
+      logger.info("a pessoa concluiu a solicitação — lendo a guia");
+      const dados = await lerGuiaCapturada(page, config);
+      const print = await capturar(page, config, `scsaude-guia-${dados.numero_guia ?? jobId}`);
+      return { sucesso: true, situacao: "AUTORIZADA", comprovante_path: print, ...dados };
+    }
+
+    if (/Guia\s+Negada|Solicita[çc][ãa]o\s+Negada/i.test(texto)) {
+      return {
+        sucesso: false,
+        situacao: "NEGADA",
+        erro_codigo: "GUIA_NEGADA",
+        erro_mensagem: "O SC Saúde negou a solicitação.",
+      };
+    }
+
+    await page.waitForTimeout(3000);
+  }
+
+  const print = await capturar(page, config, `scsaude-conferencia-expirou-${jobId}`);
+  return {
+    sucesso: false,
+    situacao: "AGUARDANDO_CONFERENCIA",
+    comprovante_path: print,
+    erro_codigo: "CONFERENCIA_NAO_CONCLUIDA",
+    erro_mensagem:
+      `A guia foi preenchida e ficou ${minutos} minutos esperando conferência sem ser concluída. ` +
+      "A janela continua aberta: dá para terminar à mão. Se a guia foi gerada depois disso, " +
+      "ela existe no portal mesmo que o sistema não tenha anotado — confira antes de pedir de novo.",
+  };
+}
+
 export async function solicitarEGerarGuia(
   page: Page,
   config: ConfigScSaude,
   jobId: string
 ): Promise<ResultadoScSaude> {
   await fecharInformativos(page);
+
+  // Para aqui quando a conferência é manual — que é o padrão.
+  if (config.conferenciaManual) {
+    return aguardarConferenciaHumana(page, config, jobId);
+  }
 
   // --- Solicitar Autorização ---
   const botaoSolicitar = page

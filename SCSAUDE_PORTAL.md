@@ -302,14 +302,58 @@ Atípicas: 5, ou conforme o pedido médico quando for 2× por semana.
 
 ## 6. Status possíveis da guia
 
-Autorizada · Parcialmente autorizada · Em análise · Executada · Cancelada · Negada
+Lidas direto do filtro de situação do portal em 27/10/2026 — são mais do que o documento da
+operação dizia:
+
+| Situação |
+|---|
+| Autorizado |
+| Parcialmente Autorizado |
+| **Em análise** |
+| **Aguardando justificativa técnica do solicitante** |
+| **Aguardando documentação do prestador** |
+| **Aguardando retorno do prestador** |
+| **Perícia** |
+| Negado |
+| Cancelado |
+
+As quatro em negrito não estavam mapeadas. **Três delas são pedidos de ação**, não espera:
+a guia parou porque falta alguma coisa do nosso lado. Tratar tudo como "em análise" faria o
+robô esperar por algo que nunca vem sozinho.
 
 "Parcialmente autorizada" casa com a leitura de quantidade autorizada já implementada para a
 Unimed em 22/09 — a guia deve ser gravada com o **autorizado**, não com o pedido.
 
 ---
 
-## 7. A etapa de captura
+## 7. Onde as guias ficam depois (telas de lista)
+
+Mapeado em 27/10/2026, navegando em modo somente-leitura.
+
+| Tela | Endereço | Para quê |
+|---|---|---|
+| Solicitações e Encaminhamentos | `/atendimentos/encaminhados` | guias pendentes de decisão da operadora |
+| Meus Atendimentos | `/solicitacoes` | guias já capturadas pela clínica |
+
+As duas têm o mesmo conjunto de filtros, com `name` estável:
+
+```
+form-filtros:inicio-data-solicitacao:value   form-filtros:fim-data-solicitacao:value
+form-filtros:inicio-data-validade:value      form-filtros:fim-data-validade:value
+form-filtros:carteira-filtro:value           form-filtros:beneficiario-filtro:value
+```
+
+*Meus Atendimentos* tem ainda `inicio-data-digitacao` / `fim-data-digitacao`.
+
+A situação é um `<select>` com id gerado pelo JSF (`form-filtros:j_idt257` numa tela,
+`j_idt270` na outra). **Esse id não é estável** — é contagem de componente, muda quando a
+operadora mexe no layout. Para o robô, selecionar pela opção ("Em análise") e não pelo id.
+
+Botões: **Pesquisar** e **Limpar**.
+
+---
+
+## 8. A etapa de captura
 
 Guia autorizada na hora já é capturada automaticamente. Guia que cai **em análise** fica na nuvem
 e precisa ser **capturada depois**, manualmente, quando for autorizada.
@@ -319,7 +363,7 @@ Fica fora do primeiro corte.
 
 ---
 
-## 8. Como isolar numa máquina só
+## 9. Como isolar numa máquina só
 
 Duas coisas diferentes precisam ser isoladas, e a resposta não é a mesma para as duas.
 
@@ -379,7 +423,7 @@ então essa pasta nunca pode ser commitada nem publicada; vai compactada, por ca
 
 ---
 
-## 9. Depois de enviar: alertas, resultado e captura
+## 10. Depois de enviar: alertas, resultado e captura
 
 > Mapeado em 16/10/2026 a partir de **duas autorizações reais** feitas à mão pela
 > colaboradora que opera o portal, com 46 capturas de tela. Os prints ficam em
@@ -479,7 +523,7 @@ casos a lista foi:
 
 ---
 
-## 10. O adaptador (código)
+## 11. O adaptador (código)
 
 Escrito em 19/10/2026. Vive em `unimed-mvp-final/src/scsaude/`, separado do fluxo da Unimed.
 É **um robô só**: `index.ts` ganhou o subcomando `scsaude`, e quem escolhe é o servidor a
@@ -512,7 +556,7 @@ Nenhum job chega aqui até isso existir.
 
 ---
 
-## 11. Execução de sessão — no escopo, sem mapa
+## 12. Execução de sessão — no escopo, sem mapa
 
 **Decidido em 19/10/2026: a clínica vai executar sessão no SC Saúde também**, como já faz na
 Unimed. Isso dobra o escopo do robô: além de pedir a autorização, ele terá que registrar a
@@ -541,7 +585,7 @@ paralelo com ele.
 
 ---
 
-## 12. O que ainda falta
+## 13. O que ainda falta
 
 1. **A guia que fica EM ANÁLISE.** Nas duas autorizações reais o resultado foi *Guia
    Autorizada* na hora, então o caminho de análise continua sem mapa — tanto a tela de

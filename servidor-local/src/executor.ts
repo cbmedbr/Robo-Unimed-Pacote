@@ -435,6 +435,11 @@ function rodarSubprocesso(
     // padrão): assim o comando no log diz qual portal foi usado, sem deduzir.
     const comando = COMANDO_POR_OPERADORA[operadora];
 
+    // O SC Saude para e espera a pessoa conferir antes de emitir. Com o
+    // timeout da Unimed, o servidor mataria o robo no meio da conferencia e
+    // fecharia a janela com a guia preenchida na frente dela.
+    const timeoutMs = operadora === "scsaude" ? config.scsaudeTimeoutMs : config.roboTimeoutMs;
+
     const proc = spawn(
       process.execPath,
       [tsxCli, scriptPath, comando, "--input", inputPath],
@@ -549,10 +554,10 @@ function rodarSubprocesso(
       resolverUmaVez({
         sucesso: false,
         erro_codigo: "TIMEOUT",
-        erro_mensagem: `Robô demorou mais de ${Math.round(config.roboTimeoutMs / 1000)}s. Encerrado.`,
+        erro_mensagem: `Robô demorou mais de ${Math.round(timeoutMs / 1000)}s. Encerrado.`,
         duracao_ms: Date.now() - inicioMs,
       });
-    }, config.roboTimeoutMs);
+    }, timeoutMs);
   });
 }
 

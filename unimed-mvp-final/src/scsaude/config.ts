@@ -33,11 +33,19 @@ export function carregarConfigScSaude(): ConfigScSaude {
 
   const debug = process.env.DEBUG === "true";
 
+  // Conferencia manual e o PADRAO: so desliga quem escrever "false" de forma
+  // explicita. O padrao seguro aqui e o que exige gente olhando.
+  const conferenciaManual = process.env.SCSAUDE_CONFERENCIA_MANUAL !== "false";
+
   return {
     usuario,
     senha,
     url: process.env.SCSAUDE_URL || "https://portal.scsaude.sc.gov.br/sistemas",
-    headless: debug ? false : process.env.HEADLESS !== "false",
+    // Sem janela nao ha como conferir nem clicar. Em modo manual o headless e
+    // ignorado de proposito, mesmo que o .env peca true.
+    headless: conferenciaManual ? false : debug ? false : process.env.HEADLESS !== "false",
+    conferenciaManual,
+    esperaConferenciaMs: parseInt(process.env.SCSAUDE_ESPERA_CONFERENCIA_MS || "900000", 10),
     screenshotDir: process.env.SCREENSHOT_DIR || "./screenshots",
     debug,
     navegacaoTimeout: parseInt(process.env.NAVEGACAO_TIMEOUT || "40000", 10),

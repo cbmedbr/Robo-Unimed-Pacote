@@ -17,6 +17,19 @@ export interface ConfigScSaude {
   debug: boolean;
   navegacaoTimeout: number;
   clickTimeout: number;
+
+  /**
+   * Quando true (padrao), o robo preenche tudo e PARA antes de solicitar a
+   * autorizacao, deixando a pessoa conferir e clicar.
+   *
+   * Decidido pela operacao em 27/10/2026: emitir autorizacao e irreversivel,
+   * e um dado errado so aparece quando a guia ja existe. O robo faz o trabalho
+   * chato; a decisao de enviar continua com quem responde por ela.
+   */
+  conferenciaManual: boolean;
+
+  /** Quanto tempo esperar a pessoa conferir e clicar, em modo manual. */
+  esperaConferenciaMs: number;
 }
 
 export interface InputAutorizacaoScSaude {
@@ -53,7 +66,12 @@ export interface InputAutorizacaoScSaude {
   pedido_medico_path: string;
 }
 
-export type SituacaoScSaude = "AUTORIZADA" | "EM_ANALISE" | "NEGADA";
+export type SituacaoScSaude =
+  | "AUTORIZADA"
+  | "EM_ANALISE"
+  | "NEGADA"
+  /** Preenchido e esperando a pessoa conferir e clicar. */
+  | "AGUARDANDO_CONFERENCIA";
 
 export interface ResultadoScSaude {
   sucesso: boolean;
@@ -78,6 +96,7 @@ export type EtapaScSaude =
   | "formulario"
   | "anexo"
   | "autorizacao"
+  | "conferencia"
   | "captura";
 
 export class ErroScSaude extends Error {

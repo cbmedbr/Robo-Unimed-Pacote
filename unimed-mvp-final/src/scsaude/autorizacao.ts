@@ -30,6 +30,7 @@ export async function executarAutorizacaoScSaude(
   let browser: Browser | null = null;
   let page: Page | null = null;
   let etapa: EtapaScSaude = "validacao";
+  let desfechoDecidido = false;
 
   try {
     validarInput(input);
@@ -56,7 +57,7 @@ export async function executarAutorizacaoScSaude(
     etapa = "anexo";
     await anexarPedidoMedico(page, input, config);
 
-    etapa = "autorizacao";
+    etapa = config.conferenciaManual ? "conferencia" : "autorizacao";
     const resultado = await solicitarEGerarGuia(page, config, input.job_id);
 
     const duracao = Date.now() - inicio;
@@ -64,6 +65,12 @@ export async function executarAutorizacaoScSaude(
       { numero_guia: resultado.numero_guia, situacao: resultado.situacao, duracao_ms: duracao },
       resultado.sucesso ? "autorização SC Saúde concluída" : "autorização SC Saúde não concluída"
     );
+
+    // Desfecho decidido = nao ha mais nada para a pessoa fazer nesta janela.
+    desfechoDecidido =
+      resultado.sucesso ||
+      resultado.erro_codigo === "GUIA_NEGADA" ||
+      resultado.erro_codigo === "CONFERENCIA_CANCELADA";
 
     return { ...resultado, duracao_ms: duracao };
   } catch (err) {
@@ -82,7 +89,12 @@ export async function executarAutorizacaoScSaude(
       duracao_ms: Date.now() - inicio,
     };
   } finally {
-    await browser?.close().catch(() => {});
+    // Em conferencia manual, a janela E a ferramenta de trabalho da pessoa:
+    // fechar aqui tiraria a guia preenchida da frente dela. So fecha quando o
+    // desfecho ja esta decidido (guia saiu, foi negada, ou a pessoa fechou).
+    const manterAberto = config.conferenciaManual && !desfechoDecidido;
+    if (!manterAberto) await browser?.close().catch(() => {});
+    else logger.info("janela mantida aberta para a conferencia continuar");
   }
 }
 

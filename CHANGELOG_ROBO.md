@@ -4,6 +4,48 @@
 
 ---
 
+## 27/10/2026
+
+### SC Saúde: o robô preenche, a pessoa confere e emite
+**Arquivos:** `unimed-mvp-final/src/scsaude/{tipos,config,finalizar,autorizacao}.ts`,
+`servidor-local/src/{config,executor}.ts`, `SCSAUDE_PORTAL.md`
+
+Pedido da operação: o robô faz todo o processo mas **não clica em emitir**. Emitir autorização
+é irreversível — um dado errado só aparece quando a guia já existe no portal da operadora, e aí
+o conserto é manual e caro.
+
+Agora o robô acha o paciente, o médico e o contratado, digita, anexa o pedido — e **para**. A
+janela fica aberta com uma mensagem explicando o que fazer. Quem confere decide enviar.
+
+Depois que a pessoa clica, **o robô volta a trabalhar**: espera a tela de Guia Capturada e anota
+número, senha e validade. O CRM não fica sem o registro só porque a emissão passou por um
+humano.
+
+Detalhes que importam:
+
+- **Manual é o padrão.** Só desliga quem escrever `SCSAUDE_CONFERENCIA_MANUAL=false` de forma
+  explícita. O padrão seguro é o que exige gente olhando.
+- **`headless` é ignorado em modo manual** — sem janela não há como conferir nem clicar.
+- **A janela não é fechada** enquanto o desfecho não está decidido. Fechá-la tiraria a guia
+  preenchida da frente da pessoa.
+- **O timeout do servidor subiu para 25 minutos** só para o SC Saúde (`SCSAUDE_TIMEOUT_MS`).
+  Com os 3 minutos da Unimed, o servidor mataria o robô no meio da conferência.
+- Fechar a janela devolve `CONFERENCIA_CANCELADA`, deixando claro que **nada foi enviado** e o
+  pedido pode ser refeito sem risco de duplicidade.
+
+### Situações da guia: eram seis, são nove
+
+Lidas direto do filtro do portal. Quatro não estavam mapeadas, e **três delas são pedidos de
+ação**, não espera: *Aguardando justificativa técnica do solicitante*, *Aguardando documentação
+do prestador* e *Aguardando retorno do prestador*. Também existe *Perícia*. Tratar tudo como
+"em análise" faria o robô esperar por algo que nunca vem sozinho.
+
+Mapeadas também as duas telas de lista — `/atendimentos/encaminhados` e `/solicitacoes` — com
+seus filtros. Aviso registrado: o `<select>` de situação tem id gerado pelo JSF
+(`j_idt257`/`j_idt270`), que **não é estável**; selecionar pela opção, nunca pelo id.
+
+---
+
 ## 19/10/2026
 
 ### Roteamento por operadora no servidor, com gate por máquina

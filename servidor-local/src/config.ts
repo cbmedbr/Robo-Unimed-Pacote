@@ -38,6 +38,13 @@ export const config = {
   scsaudeSenha: process.env.SCSAUDE_SENHA ?? "",
   roboCaminho: obrigatorio("ROBO_CAMINHO"),
   roboTimeoutMs: parseInt(opcional("ROBO_TIMEOUT_MS", "180000"), 10),
+
+  // O SC Saúde para e espera a pessoa conferir antes de emitir, então o job
+  // dura o tempo de alguém ler a tela com calma. Com os 3 minutos da Unimed o
+  // servidor mataria o robô no meio da conferência, fechando a janela com a
+  // guia preenchida na frente da pessoa. 25 minutos cobre a espera de 15 do
+  // robô mais o tempo de preencher.
+  scsaudeTimeoutMs: parseInt(opcional("SCSAUDE_TIMEOUT_MS", "1500000"), 10),
   roboHeadless: opcional("ROBO_HEADLESS", "false") === "true",
   port: parseInt(opcional("PORT", "9876"), 10),
   corsOrigins: opcional("CORS_ORIGINS", "*").split(",").map((s) => s.trim()),
