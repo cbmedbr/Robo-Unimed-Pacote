@@ -655,15 +655,93 @@ paralelo com ele.
 
 ---
 
-## 13. O que ainda falta
+## 13. A guia EM ANÁLISE
 
-> **Sobre a guia em análise:** em 27/10/2026 tentamos rastrear uma pelo portal e não
-> conseguimos — não porque o portal esconda, mas pela armadilha 1 da seção 7 (o filtro de
-> data volta sozinho). Fica registrada uma hipótese a confirmar: **talvez não exista nenhuma**.
-> As duas autorizações reais de 16/10 saíram **autorizadas na hora**, e o procedimento de
-> psicoterapia pode ser de liberação automática no SC Saúde. Se for esse o caso, o caminho
-> de análise é raro e o robô pode tratá-lo como exceção para humano em vez de fluxo a
-> automatizar.
+Mapeada em 27/10/2026, abrindo uma guia real em modo somente-leitura.
+
+**Elas existem** — e não são raras. Numa janela de três semanas havia cinco.
+
+### 13.1 Quem vai para análise
+
+A guia que encontramos é de **sessão ABA** (`13107208`), não de psicoterapia típica. A
+crítica que a prendeu foi:
+
+```
+SCAUT_0360: Item necessita de auditoria.
+```
+
+Isso fecha com o que já sabíamos: as duas autorizações típicas de 16/10 saíram **autorizadas
+na hora**. A hipótese de trabalho passa a ser:
+
+| Procedimento | Caminho esperado |
+|---|---|
+| `10101118` psicoterapia típica | autorizada na hora |
+| `13107208` ABA | **vai para auditoria** |
+
+**Para o robô isso muda a prioridade:** o fluxo de análise não é exceção rara, é o caminho
+normal do ABA. Tratar como erro geraria alarme em todo pedido atípico.
+
+### 13.2 Como reconhecer, sem depender de texto
+
+| Sinal | Valor |
+|---|---|
+| Faixa no topo | `⚙ Em análise` (amarela) |
+| **Senha** | **vazia** |
+| **Validade da Senha** | **vazia** |
+| Prestador que Capturou a Guia | `-` |
+
+**Senha vazia é o marcador mais confiável.** Guia autorizada sempre tem senha e validade;
+em análise, os dois campos ficam em branco. Dá para ler isso tanto na lista quanto na guia
+aberta, sem depender do texto da faixa.
+
+### 13.3 A barra de ferramentas muda
+
+Some o que serve para pedir, aparece o que serve para acompanhar:
+
+```
+Anexar Documentos · Anexos · Beneficiário · Resumo da Guia ·
+Cancelar Guia · Mensagens Guia · Priorizar Guia
+```
+
+Não há *Solicitar Autorização* nem *Gerar Guia* — a solicitação já foi enviada. As três
+últimas são novas e úteis:
+
+- **Mensagens Guia** — conversa com a operadora. É por onde se responde quando a situação é
+  *Aguardando justificativa técnica* ou *Aguardando documentação*.
+- **Priorizar Guia** — pede urgência na auditoria.
+- **Cancelar Guia** — desiste do pedido.
+
+### 13.4 O que a operação já faz à mão
+
+A guia examinada trazia, em *Observação / Justificativa*:
+
+```
+GUIA EM ANÁLISE | PREZADOS, PACIENTE REALIZA TRATAMENTO 2X POR SEMANA
+NOS DIA 28/10 30/10 04/11 09/11
+```
+
+Ou seja: **a clínica já usa esse campo para justificar a frequência à auditoria**. É o
+equivalente ao que a Unimed recebia na indicação clínica até 30/09. Se o robô for pedir ABA,
+precisa preencher isso — senão a auditoria recebe um pedido de 4 sessões sem explicação.
+
+Outro detalhe do caso real: a indicação clínica estava como `CID 11. 6A02.0` — **CID-11**, não
+CID-10. O portal aceita. Vale lembrar que o CRM tem 29 pacientes com código CID-11, que a
+validação do robô da Unimed recusa.
+
+### 13.5 O que continua fora
+
+**A captura em si.** O texto do portal diz onde ela acontece:
+
+> *"Para executar uma destas guias, crie um novo ATENDIMENTO e capture a guia desejada."*
+
+Ou seja: a captura não se faz de dentro da guia, e sim pelo caminho *Novo → Captura/Execução*,
+já mapeado na seção 2. O que falta é só o clique final em **Capturar guias** — que tem efeito
+real na operadora e, por isso, não foi executado no reconhecimento.
+
+---
+
+## 14. O que ainda falta
+
 
 
 1. **A guia que fica EM ANÁLISE.** Nas duas autorizações reais o resultado foi *Guia
