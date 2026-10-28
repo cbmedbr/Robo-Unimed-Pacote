@@ -4,6 +4,42 @@
 
 ---
 
+## 28/10/2026
+
+### Execução falhava num clique que tinha funcionado
+**Arquivos:** `unimed-mvp-final/src/execucao/buscar_e_abrir_guia.ts`
+
+Uma colaboradora reportou `ERRO_DESCONHECIDO` na execução. O log dizia tudo:
+
+```
+locator.click: Timeout 5000ms exceeded.
+  - performing click action
+  - click action done              <- o clique FUNCIONOU
+  - waiting for scheduled navigations to finish   <- travou aqui
+```
+
+O `click()` do Playwright espera, por padrão, a navegação que ele mesmo dispara — e esse
+wait corre dentro do timeout do clique. O clique em *Exames em aberto* tinha **5000ms fixos**,
+destoando dos 30s que todos os outros cliques do arquivo usam. Quando o portal demorava mais
+que isso, o clique funcionava e mesmo assim lançava timeout.
+
+Pior: a linha seguinte **já** esperava a navegação, com `waitForLoadState` e `.catch()` que
+tolera demora. A espera do clique era redundante — e era a única que derrubava o robô.
+
+Agora o clique usa `noWaitAfter: true` e o timeout normal. Quem espera a navegação é a linha
+que sempre esperou. O mesmo tratamento foi aplicado aos outros quatro cliques do arquivo, que
+tinham o mesmo padrão e só não estouravam por usarem 30s.
+
+Também foi acrescentada uma confirmação de que a tela abriu, com erro próprio
+`EXAMES_EM_ABERTO_NAO_ABRIU` e mensagem dizendo que nada foi alterado e que dá para repetir —
+em vez do `ERRO_DESCONHECIDO` que não apontava para lugar nenhum.
+
+**Frequência:** rara no geral — 0 ou 1 por dia em ~170 execuções. Mas hoje foram 2 em 6, o
+que encaixa com lentidão do portal. O conserto tira a sensibilidade à velocidade do servidor
+nesse ponto.
+
+---
+
 ## 27/10/2026
 
 ### SC Saúde: o robô preenche, a pessoa confere e emite
