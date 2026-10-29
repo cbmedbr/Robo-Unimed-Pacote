@@ -2,7 +2,7 @@ import path from "path";
 import { Page } from "playwright";
 import { logger } from "../utils/logger";
 import { ConfigScSaude, ErroScSaude, ResultadoScSaude, SituacaoScSaude } from "./tipos";
-import { fecharInformativos } from "./portal";
+import { apareceu, fecharInformativos } from "./portal";
 
 /**
  * Envia a solicitação e lê o resultado.
@@ -128,7 +128,7 @@ export async function solicitarEGerarGuia(
     .locator('a:has-text("Solicitar Autorização"), button:has-text("Solicitar Autorização")')
     .first();
 
-  if (!(await botaoSolicitar.isVisible({ timeout: 10000 }).catch(() => false))) {
+  if (!(await apareceu(botaoSolicitar, 10000))) {
     throw new ErroScSaude(
       "SOLICITAR_BOTAO_NAO_ENCONTRADO",
       'Não achei o botão "Solicitar Autorização" na barra da guia.'
@@ -182,7 +182,7 @@ export async function solicitarEGerarGuia(
     )
     .first();
 
-  if (!(await botaoGerar.isVisible({ timeout: 10000 }).catch(() => false))) {
+  if (!(await apareceu(botaoGerar, 10000))) {
     throw new ErroScSaude(
       "GERAR_GUIA_NAO_ENCONTRADO",
       'A guia foi autorizada mas não achei o botão "Finalizar e Gerar a Guia". ' +
@@ -212,7 +212,10 @@ export async function solicitarEGerarGuia(
 async function lerEFecharAlertas(page: Page): Promise<string[]> {
   const modal = page.locator('.modal:visible:has-text("A guia solicitada possui alertas")').first();
 
-  if (!(await modal.isVisible({ timeout: 6000 }).catch(() => false))) return [];
+  // O modal de alertas chega depois do AJAX da solicitação. Ausência aqui
+  // significa "não houve alerta", que é caso normal — por isso só devolve
+  // lista vazia em vez de falhar.
+  if (!(await apareceu(modal, 6000))) return [];
 
   const texto = ((await modal.innerText().catch(() => "")) || "").replace(/\s+/g, " ").trim();
   const codigos = [...texto.matchAll(/SCAUT_\d+/g)].map((m) => m[0]);
@@ -221,7 +224,7 @@ async function lerEFecharAlertas(page: Page): Promise<string[]> {
   logger.warn({ alertas, texto: texto.slice(0, 300) }, "o portal acusou alertas na guia");
 
   const ok = modal.locator('button:has-text("OK, entendi"), a:has-text("OK, entendi")').first();
-  if (await ok.isVisible({ timeout: 3000 }).catch(() => false)) {
+  if (await apareceu(ok, 3000)) {
     await ok.click();
     await page.waitForTimeout(1500);
   }

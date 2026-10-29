@@ -609,14 +609,22 @@ para **calcular a quantidade**, só não entram mais no texto.
 
 1. **Campo `NM_PROFISSIONAL` limpo pelo portal** — Após clicar "Atualizar procedimento", o SGU limpa o campo do médico solicitante. **Resolvido em 25/09/2026:** o robô re-preenche antes de finalizar (`garantirSolicitantePreenchido`). Antes disso ele apenas logava um warning e clicava em Finalizar mesmo assim, o que fazia o portal recusar — era a causa do `FINALIZACAO_FALHOU`, o erro mais frequente do robô (312 ocorrências entre 25/05 e 02/09).
 
-2. **Clique que funciona e mesmo assim dá timeout** — O `click()` do Playwright espera, por
+2. **`isVisible()` não espera** — `locator.isVisible({ timeout: N })` **não** espera N
+   milissegundos: checa na hora e devolve `false` se o elemento ainda não renderizou. Medido
+   numa página que renderiza em 2s: `isVisible` devolveu `false` em 66ms; `waitFor` achou em
+   2526ms. Usar `waitFor({ state: 'visible', timeout })` sempre que a intenção for esperar —
+   no adaptador do SC Saúde há o helper `apareceu()` para isso. **Derrubou execuções em
+   28-29/10/2026** e teria quebrado todos os typeaheads do SC Saúde. `isVisible()` só é certo
+   para "está aí AGORA?" sobre tela já renderizada.
+
+3. **Clique que funciona e mesmo assim dá timeout** — O `click()` do Playwright espera, por
    padrão, a navegação que ele dispara, e essa espera corre dentro do timeout do clique. Com
    o portal lento, o log mostra `click action done` seguido de
    `waiting for scheduled navigations to finish` e estoura. **Resolvido em 28/10/2026** em
    `buscar_e_abrir_guia.ts`: os cliques que navegam usam `noWaitAfter: true`, e quem espera é
    o `waitForLoadState`/`waitForURL` que já vinha depois. Regra para o resto do robô: **se há
    uma espera explícita depois do clique, o clique não deve esperar de novo.**
-3. **Confirmação do envio não era clicada** — Depois de *Finalizar Parcial* o portal abre uma
+4. **Confirmação do envio não era clicada** — Depois de *Finalizar Parcial* o portal abre uma
    página pedindo confirmação do envio à Unimed. Sem esse clique **nada é enviado**. Os dois
    fluxos de execução achavam a página por `url.includes("finalizar_msg")`; em 14/10/2026 o
    endereço mudou e o robô falhou em 100% das execuções do dia, fotografando a página sem
@@ -624,20 +632,20 @@ para **calcular a quantidade**, só não entram mais no texto.
    TEXTO da pergunta (endereço antigo mantido como sinal extra) e `clicarConfirmar()` nunca
    clica em Cancelar. Mesma família dos itens 1 e 3: casamento estreito que quebra calado.
 
-4. **Indicação clínica ficava em branco** — O campo `DS_INDIC_CLINICA` era opcional e o robô só
+5. **Indicação clínica ficava em branco** — O campo `DS_INDIC_CLINICA` era opcional e o robô só
    logava um warning quando não conseguia preenchê-lo. Em 30/09/2026 a Unimed passou a exigi-lo
    para "Outras Terapias" e uma guia foi **glosada** por sair sem ele. **Resolvido em
    30/09/2026:** o *Tipo de atendimento* passou a ser selecionado antes (ele recarrega o bloco e
    apagava a indicação), o preenchimento confere o valor gravado e falha se ficar vazio, e
    `garantirIndicacaoClinicaPreenchida()` re-preenche antes de finalizar. Mesma família do item 1.
 
-5. **Seleção de médico por nome é frágil** — Se o nome no SGU difere do CRM (iniciais, prefixo DR.), o robô tenta 5 estratégias de fallback. Último recurso: primeiro link "Pessoa Física" na tabela.
+6. **Seleção de médico por nome é frágil** — Se o nome no SGU difere do CRM (iniciais, prefixo DR.), o robô tenta 5 estratégias de fallback. Último recurso: primeiro link "Pessoa Física" na tabela.
 
-6. **Override de `window.confirm()`** — O popup de QR Code precisa de `addInitScript` para auto-aceitar `confirm()`. Backup: handler de dialog registrado.
+7. **Override de `window.confirm()`** — O popup de QR Code precisa de `addInitScript` para auto-aceitar `confirm()`. Backup: handler de dialog registrado.
 
-7. **Situação default = EM_ANALISE** — Se o HTML da finalização não bater com nenhum padrão, o robô reporta EM_ANALISE (conservador). Pode gerar ciclos desnecessários de verificação.
+8. **Situação default = EM_ANALISE** — Se o HTML da finalização não bater com nenhum padrão, o robô reporta EM_ANALISE (conservador). Pode gerar ciclos desnecessários de verificação.
 
-8. **Detecção de série é frágil** — Depende de `input[id="is_serie_1"]` com `value='1'`. Se o SGU mudar esse hidden field, o fluxo série não será detectado.
+9. **Detecção de série é frágil** — Depende de `input[id="is_serie_1"]` com `value='1'`. Se o SGU mudar esse hidden field, o fluxo série não será detectado.
 
 ---
 

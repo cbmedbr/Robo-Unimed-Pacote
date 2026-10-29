@@ -10,6 +10,35 @@ import { ErroScSaude } from "./tipos";
  */
 
 // ---------------------------------------------------------------------------
+// Esperar um elemento aparecer
+// ---------------------------------------------------------------------------
+
+/**
+ * Espera o elemento ficar visível. `true` se apareceu, `false` se não.
+ *
+ * **Use isto, nunca `isVisible({ timeout })`.** O `isVisible()` do Playwright
+ * não espera: ele checa na hora e devolve `false` se o elemento ainda não
+ * renderizou, e o `timeout` passado a ele não o faz tentar de novo. É fácil
+ * escrever `isVisible({ timeout: 8000 })` achando que espera 8 segundos —
+ * medimos 66ms contra os 2,5s que o `waitFor` espera no mesmo caso.
+ *
+ * Esse engano derrubou execuções da Unimed em 28/10/2026: a checagem dizia
+ * esperar 15 segundos e a sessão inteira durava 6.
+ *
+ * `isVisible()` continua certo quando a pergunta é mesmo "está aí AGORA?" —
+ * por exemplo ao varrer uma lista de candidatos já renderizada.
+ */
+export async function apareceu(
+  alvo: { waitFor: (o: { state: "visible"; timeout: number }) => Promise<void> },
+  timeout: number
+): Promise<boolean> {
+  return alvo
+    .waitFor({ state: "visible", timeout })
+    .then(() => true)
+    .catch(() => false);
+}
+
+// ---------------------------------------------------------------------------
 // Informativos modais
 // ---------------------------------------------------------------------------
 
@@ -66,7 +95,7 @@ export async function typeahead(
 ): Promise<string | null> {
   const campo = page.locator(seletor).first();
 
-  if (!(await campo.isVisible({ timeout: 8000 }).catch(() => false))) {
+  if (!(await apareceu(campo, 8000))) {
     throw new ErroScSaude(
       "CAMPO_NAO_ENCONTRADO",
       `Campo "${rotulo}" não existe nesta tela (${seletor}).`
@@ -80,10 +109,10 @@ export async function typeahead(
   // A busca é por AJAX; a lista demora. Espera a lista aparecer em vez de
   // dormir um tempo fixo, que é o que torna isto frágil em máquina lenta.
   const lista = page.locator("ul.typeahead li:visible, .dropdown-menu li:visible, .tt-suggestion:visible");
-  const veio = await lista
-    .first()
-    .isVisible({ timeout: 8000 })
-    .catch(() => false);
+  // A lista de sugestões chega por AJAX: ela NUNCA está lá no instante do
+  // último caractere. Com `isVisible` este caminho falharia sempre, e todo
+  // typeahead do adaptador — médico, contratado, procedimento — morreria.
+  const veio = await apareceu(lista.first(), 8000);
 
   if (!veio) {
     logger.warn({ rotulo, valor }, "typeahead não devolveu sugestão");

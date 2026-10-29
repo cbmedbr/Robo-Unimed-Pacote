@@ -1,6 +1,7 @@
 import { Page } from "playwright";
 import { logger } from "../utils/logger";
 import { ConfigScSaude, ErroScSaude } from "./tipos";
+import { apareceu } from "./portal";
 
 /**
  * Login no portal do SC Saúde e entrada no sistema "Atendimento".
@@ -45,7 +46,7 @@ export async function fazerLoginScSaude(page: Page, config: ConfigScSaude): Prom
   logger.info("login aceito — entrando em Atendimento");
 
   const atendimento = page.getByText(/Atendimento/i).first();
-  if (!(await atendimento.isVisible({ timeout: 15000 }).catch(() => false))) {
+  if (!(await apareceu(atendimento, 15000))) {
     throw new ErroScSaude(
       "MENU_NAO_ENCONTRADO",
       'Entrou no portal mas não achou o sistema "Atendimento" na tela de sistemas disponíveis.'

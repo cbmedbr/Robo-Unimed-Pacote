@@ -2,7 +2,7 @@ import fs from "fs";
 import { Page } from "playwright";
 import { logger } from "../utils/logger";
 import { ConfigScSaude, ErroScSaude, InputAutorizacaoScSaude } from "./tipos";
-import { fecharInformativos } from "./portal";
+import { apareceu, fecharInformativos } from "./portal";
 
 /**
  * Anexa o pedido médico.
@@ -30,7 +30,7 @@ export async function anexarPedidoMedico(
   await fecharInformativos(page);
 
   const botaoAbrir = page.getByText(/Anexar\s+Documentos?/i).first();
-  if (!(await botaoAbrir.isVisible({ timeout: 10000 }).catch(() => false))) {
+  if (!(await apareceu(botaoAbrir, 10000))) {
     throw new ErroScSaude(
       "ANEXO_BOTAO_NAO_ENCONTRADO",
       'Não achei o botão "Anexar Documentos" na barra da guia.'
@@ -58,7 +58,7 @@ export async function anexarPedidoMedico(
     .locator('.modal:visible button:has-text("Anexar"), .modal:visible input[value="Anexar"]')
     .first();
 
-  if (!(await botaoAnexar.isVisible({ timeout: 5000 }).catch(() => false))) {
+  if (!(await apareceu(botaoAnexar, 5000))) {
     throw new ErroScSaude("ANEXO_SEM_BOTAO_CONFIRMAR", 'O modal de anexo não tem botão "Anexar".');
   }
 

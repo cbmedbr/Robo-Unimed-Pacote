@@ -57,10 +57,20 @@ export async function buscarEAbrirGuia(
   // Confirma que a tela abriu, em vez de seguir e falhar adiante com um erro
   // que não aponta para cá. O filtro por nome do beneficiário é o que
   // caracteriza a tela de exames em aberto.
+  //
+  // `waitFor`, NÃO `isVisible`: o `isVisible()` do Playwright **não espera** —
+  // checa na hora e devolve false se o elemento ainda não renderizou, e o
+  // `timeout` que se passa a ele não o faz tentar de novo. Medido: 66ms contra
+  // os 2,5s que o `waitFor` espera no mesmo caso.
+  //
+  // Esta checagem entrou em 28/10 com `isVisible({ timeout: 15000 })` e
+  // derrubou execuções que teriam funcionado: a sessão inteira durava 6s, prova
+  // de que os 15s nunca aconteceram.
   const abriu = await page
     .locator('input[name="s_nm_benef"]')
     .first()
-    .isVisible({ timeout: 15000 })
+    .waitFor({ state: "visible", timeout: 15000 })
+    .then(() => true)
     .catch(() => false);
 
   if (!abriu) {

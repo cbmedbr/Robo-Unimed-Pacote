@@ -4,6 +4,46 @@
 
 ---
 
+## 29/10/2026
+
+### `isVisible()` não espera — e eu tinha usado como se esperasse
+**Arquivos:** `unimed-mvp-final/src/execucao/buscar_e_abrir_guia.ts`,
+`unimed-mvp-final/src/scsaude/{portal,login,beneficiario,anexo,finalizar}.ts`
+
+A checagem que entrou ontem (`EXAMES_EM_ABERTO_NAO_ABRIU`) passou a derrubar execuções que
+teriam funcionado. A colaboradora disse que o portal estava normal, e estava: **o erro era
+meu**.
+
+O log entregou: a sessão inteira durou **6,4 segundos**, com ~2,6s entre a navegação e a
+falha. A checagem dizia esperar 15 segundos. Os 15 segundos nunca aconteceram.
+
+**`locator.isVisible()` do Playwright não espera.** Ele checa na hora e devolve `false` se o
+elemento ainda não renderizou; o `timeout` que se passa a ele não o faz tentar de novo.
+Medido com uma página que renderiza em 2s:
+
+```
+isVisible({ timeout: 5000 })  ->  false  em   66ms
+waitFor({ visible, 5000 })    ->  true   em 2526ms
+```
+
+Quem espera é `waitFor({ state: "visible" })`.
+
+Corrigido no ponto que quebrou e **nos oito pontos do adaptador do SC Saúde onde cometi o
+mesmo engano** — esse código nunca rodou contra o portal, então o erro estava lá esperando.
+O pior deles era a lista de sugestões do typeahead: ela chega por AJAX e nunca está presente
+no instante do último caractere, então **todo typeahead do adaptador falharia sempre** —
+médico, contratado e procedimento.
+
+Criado o helper `apareceu(locator, timeout)` em `scsaude/portal.ts`, com a explicação do
+porquê. Verificado: espera 2,3s quando o elemento aparece em 2s, e devolve `false` depois do
+tempo cheio quando não aparece.
+
+**Os `isVisible()` que sobraram são legítimos** e não foram tocados: são sondagens de "está
+aí agora?" sobre tela já renderizada, com timeouts curtos, em código que roda em produção há
+meses.
+
+---
+
 ## 28/10/2026
 
 ### Execução falhava num clique que tinha funcionado

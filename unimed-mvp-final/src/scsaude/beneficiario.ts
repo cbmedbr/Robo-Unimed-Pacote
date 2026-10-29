@@ -1,7 +1,7 @@
 import { Page } from "playwright";
 import { logger } from "../utils/logger";
 import { ConfigScSaude, ErroScSaude, InputAutorizacaoScSaude } from "./tipos";
-import { fecharInformativos, typeahead } from "./portal";
+import { apareceu, fecharInformativos, typeahead } from "./portal";
 
 const OPERADORA_SC_SAUDE = "757444";
 const P = "form-principal:";
@@ -98,11 +98,10 @@ export async function abrirFormularioGuia(
 
   // Confirma que o formulário abriu mesmo, em vez de seguir para preencher
   // campos que não existem e falhar com "campo não encontrado".
-  const temFormulario = await page
-    .locator(`input[name="${P}nomeProfissionalSolicitante:value"]`)
-    .first()
-    .isVisible({ timeout: 15000 })
-    .catch(() => false);
+  const temFormulario = await apareceu(
+    page.locator(`input[name="${P}nomeProfissionalSolicitante:value"]`).first(),
+    15000
+  );
 
   if (!temFormulario) {
     throw new ErroScSaude(
