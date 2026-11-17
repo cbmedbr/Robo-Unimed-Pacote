@@ -239,8 +239,14 @@ export async function finalizarGuia(
     // portal. Essa tela significa que ESSA chamada estourou — e isso convive
     // com o portal funcionando normalmente no resto, inclusive no mesmo
     // minuto, para outros pacientes. **Não presuma indisponibilidade geral**:
-    // em 17/11/2026 a colaboradora viu essa tela e o portal estava normal; a
-    // guia era de beneficiário de outra Unimed (carteira 0027, intercâmbio).
+    // em 17/11/2026 a colaboradora viu essa tela e o portal estava normal.
+    //
+    // NÃO SE SABE A CAUSA. Já descartados, com dados: não é o portal fora do
+    // ar (outras guias passaram nos mesmos minutos); não é intercâmbio (a
+    // mesma operadora da carteira tem 53 guias aprovadas em 60 dias); não é o
+    // médico solicitante (4 aprovações com o mesmo CRM). O que se observa é
+    // que falhas opacas assim já se resolveram sozinhas na 2ª ou 3ª tentativa,
+    // para o mesmo paciente, no mesmo dia.
     //
     // Vem PRIMEIRO na lista porque senão os padrões genéricos abaixo a
     // capturam e a classificam como "campo obrigatório".
@@ -291,10 +297,11 @@ export async function finalizarGuia(
         throw new Error(
           "AUTORIZADOR_INDISPONIVEL: o SGU não conseguiu falar com o Autorizador (o serviço que " +
             "valida a guia). Isso não é erro de preenchimento — e pode acontecer só nesta guia, " +
-            "com o portal funcionando normalmente no resto. É mais comum em beneficiário de outra " +
-            "Unimed (intercâmbio). ANTES de repetir, confira na lista de guias se esta já foi " +
-            "criada, para não gerar duplicada. Se repetir e cair aqui de novo, é caso de abrir " +
-            `chamado na Unimed citando a carteira do paciente. Mensagem do portal: "${trecho}".`
+            "com o portal funcionando normalmente no resto. Casos assim já passaram na 2ª ou 3ª " +
+            "tentativa, então vale repetir — mas ANTES confira na lista de guias se esta já foi " +
+            "criada, para não gerar duplicada. Se insistir em cair aqui, faça a guia à mão: se a " +
+            "mesma faixa aparecer para você, é chamado na Unimed citando a carteira do paciente. " +
+            `Mensagem do portal: "${trecho}".`
         );
       }
 

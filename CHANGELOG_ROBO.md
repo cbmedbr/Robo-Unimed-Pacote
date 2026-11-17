@@ -42,6 +42,17 @@ faixa / innerText  -> casa "Autorizador":       true
 A mensagem que vai para o banco passou a ser a faixa inteira: exatamente o que a colaboradora
 lê na tela.
 
+### E a hipótese do intercâmbio também caiu
+A colaboradora avisou que carteiras com aquela numeração são autorizadas normalmente. Confere:
+o prefixo 0027 tem **53 guias aprovadas em 60 dias**, a mais recente na véspera. O médico
+solicitante também não é o eixo — 4 aprovações com o mesmo CRM.
+
+Então a causa do `AUTORIZADOR_INDISPONIVEL` segue **desconhecida**. O que os dados mostram é
+que falhas opacas iguais a essa já se resolveram sozinhas: a mesma paciente falhou em 10/11 e
+duas vezes em 12/11, e passou na terceira tentativa, 14:19 do mesmo dia. A mensagem do robô foi
+ajustada para dizer isso — vale repetir, conferindo antes se a guia já existe — em vez de
+afirmar causa.
+
 ### Sobre o commit anterior de hoje: a premissa estava errada
 Eu tinha atribuído as 24 falhas à ordem das garantias (`garantirSolicitantePreenchido` rodando
 antes de `garantirProfissionalExecutante`). Não era isso — eram essas classificações falsas. A
