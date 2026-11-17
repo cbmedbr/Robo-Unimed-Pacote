@@ -608,9 +608,20 @@ para **calcular a quantidade**, só não entram mais no texto.
 
 ## 8. Problemas conhecidos e workarounds
 
-1. **Campo `NM_PROFISSIONAL` limpo pelo portal** — Após clicar "Atualizar procedimento", o SGU limpa o campo do médico solicitante. **Resolvido em 25/09/2026:** o robô re-preenche antes de finalizar (`garantirSolicitantePreenchido`). Antes disso ele apenas logava um warning e clicava em Finalizar mesmo assim, o que fazia o portal recusar — era a causa do `FINALIZACAO_FALHOU`, o erro mais frequente do robô (312 ocorrências entre 25/05 e 02/09). **Corrigido de novo em 17/11/2026:** a proteção rodava *antes* de `garantirProfissionalExecutante()`, que preenche data e troca o psicólogo — exatamente a interação que faz o SGU recarregar o bloco de cima e apagar o médico. Protíamos o campo e logo depois fazíamos o que o desprotege; o portal recusava com "O valor do campo Nome do profissional solicitante é obrigatório" **24 vezes em 7 dias**. Agora as garantias são repetidas imediatamente antes do clique em Finalizar.
+1. **Campo `NM_PROFISSIONAL` limpo pelo portal** — Após clicar "Atualizar procedimento", o SGU limpa o campo do médico solicitante. **Resolvido em 25/09/2026:** o robô re-preenche antes de finalizar (`garantirSolicitantePreenchido`). Antes disso ele apenas logava um warning e clicava em Finalizar mesmo assim, o que fazia o portal recusar — era a causa do `FINALIZACAO_FALHOU`, o erro mais frequente do robô (312 ocorrências entre 25/05 e 02/09). Em 17/11/2026 as garantias passaram a ser repetidas imediatamente antes do clique em Finalizar, como precaução barata (são idempotentes). **Atenção:** as 24 ocorrências de "Nome do profissional solicitante é obrigatório" que eu atribuí a isso eram outra coisa — erro de classificação do próprio robô (item 2). Não há caso medido que a repetição tenha corrigido.
 
-2. **`isVisible()` não espera** — `locator.isVisible({ timeout: N })` **não** espera N
+2. **Detector de erro lia atributo do HTML, não a tela** — Até 17/11/2026 os padrões de erro
+   da finalização rodavam contra `page.content()` (HTML cru). O SGU põe em **cada campo
+   obrigatório** um atributo com o texto do erro que ele mostraria se o campo estivesse vazio:
+   `msg-required="O valor do campo Nome do profissional solicitante é obrigatório."` — presente
+   sempre, preenchido ou não. Então o padrão `/valor do campo .* obrigat/` casava **sempre**, e
+   qualquer falha nessa tela era reportada como "campo obrigatório", com um pedaço de HTML no
+   lugar da mensagem. Em 17/11 isso mascarou 4 tentativas seguidas de uma guia cujo erro real,
+   na faixa vermelha, era exceção na comunicação com o Autorizador. **Hoje lemos a faixa
+   `td.MagnetoErrorDataTD`** (o próprio JS do portal a usa como marcador de erro) e, sem faixa,
+   o `innerText` da página — nunca o HTML cru, que carrega atributos.
+
+3. **`isVisible()` não espera** — `locator.isVisible({ timeout: N })` **não** espera N
    milissegundos: checa na hora e devolve `false` se o elemento ainda não renderizou. Medido
    numa página que renderiza em 2s: `isVisible` devolveu `false` em 66ms; `waitFor` achou em
    2526ms. Usar `waitFor({ state: 'visible', timeout })` sempre que a intenção for esperar —
@@ -618,14 +629,14 @@ para **calcular a quantidade**, só não entram mais no texto.
    28-29/10/2026** e teria quebrado todos os typeaheads do SC Saúde. `isVisible()` só é certo
    para "está aí AGORA?" sobre tela já renderizada.
 
-3. **Clique que funciona e mesmo assim dá timeout** — O `click()` do Playwright espera, por
+4. **Clique que funciona e mesmo assim dá timeout** — O `click()` do Playwright espera, por
    padrão, a navegação que ele dispara, e essa espera corre dentro do timeout do clique. Com
    o portal lento, o log mostra `click action done` seguido de
    `waiting for scheduled navigations to finish` e estoura. **Resolvido em 28/10/2026** em
    `buscar_e_abrir_guia.ts`: os cliques que navegam usam `noWaitAfter: true`, e quem espera é
    o `waitForLoadState`/`waitForURL` que já vinha depois. Regra para o resto do robô: **se há
    uma espera explícita depois do clique, o clique não deve esperar de novo.**
-4. **Confirmação do envio não era clicada** — Depois de *Finalizar Parcial* o portal abre uma
+5. **Confirmação do envio não era clicada** — Depois de *Finalizar Parcial* o portal abre uma
    página pedindo confirmação do envio à Unimed. Sem esse clique **nada é enviado**. Os dois
    fluxos de execução achavam a página por `url.includes("finalizar_msg")`; em 14/10/2026 o
    endereço mudou e o robô falhou em 100% das execuções do dia, fotografando a página sem
@@ -633,20 +644,20 @@ para **calcular a quantidade**, só não entram mais no texto.
    TEXTO da pergunta (endereço antigo mantido como sinal extra) e `clicarConfirmar()` nunca
    clica em Cancelar. Mesma família dos itens 1 e 3: casamento estreito que quebra calado.
 
-5. **Indicação clínica ficava em branco** — O campo `DS_INDIC_CLINICA` era opcional e o robô só
+6. **Indicação clínica ficava em branco** — O campo `DS_INDIC_CLINICA` era opcional e o robô só
    logava um warning quando não conseguia preenchê-lo. Em 30/09/2026 a Unimed passou a exigi-lo
    para "Outras Terapias" e uma guia foi **glosada** por sair sem ele. **Resolvido em
    30/09/2026:** o *Tipo de atendimento* passou a ser selecionado antes (ele recarrega o bloco e
    apagava a indicação), o preenchimento confere o valor gravado e falha se ficar vazio, e
    `garantirIndicacaoClinicaPreenchida()` re-preenche antes de finalizar. Mesma família do item 1.
 
-6. **Seleção de médico por nome é frágil** — Se o nome no SGU difere do CRM (iniciais, prefixo DR.), o robô tenta 5 estratégias de fallback. Último recurso: primeiro link "Pessoa Física" na tabela.
+7. **Seleção de médico por nome é frágil** — Se o nome no SGU difere do CRM (iniciais, prefixo DR.), o robô tenta 5 estratégias de fallback. Último recurso: primeiro link "Pessoa Física" na tabela.
 
-7. **Override de `window.confirm()`** — O popup de QR Code precisa de `addInitScript` para auto-aceitar `confirm()`. Backup: handler de dialog registrado.
+8. **Override de `window.confirm()`** — O popup de QR Code precisa de `addInitScript` para auto-aceitar `confirm()`. Backup: handler de dialog registrado.
 
-8. **Situação default = EM_ANALISE** — Se o HTML da finalização não bater com nenhum padrão, o robô reporta EM_ANALISE (conservador). Pode gerar ciclos desnecessários de verificação.
+9. **Situação default = EM_ANALISE** — Se o HTML da finalização não bater com nenhum padrão, o robô reporta EM_ANALISE (conservador). Pode gerar ciclos desnecessários de verificação.
 
-9. **Detecção de série é frágil** — Depende de `input[id="is_serie_1"]` com `value='1'`. Se o SGU mudar esse hidden field, o fluxo série não será detectado.
+10. **Detecção de série é frágil** — Depende de `input[id="is_serie_1"]` com `value='1'`. Se o SGU mudar esse hidden field, o fluxo série não será detectado.
 
 ---
 

@@ -153,18 +153,22 @@ export async function finalizarGuia(
 
   // ÚLTIMA CONFERÊNCIA, já com o dedo no botão.
   //
-  // As garantias acima rodavam ANTES de mexer no executante — e mexer no
-  // executante preenche data e troca o psicólogo, que é justamente o tipo de
-  // interação que faz o SGU recarregar o bloco de cima e apagar o médico
-  // solicitante. Ou seja: protegíamos o campo e, logo depois, fazíamos o que
-  // o desprotege.
+  // As garantias acima rodam ANTES de mexer no executante — e mexer no
+  // executante preenche data e troca o psicólogo, que é o tipo de interação
+  // que faz o SGU recarregar o bloco de cima e apagar o médico solicitante
+  // (ver "Problemas conhecidos", item 1). Protegíamos o campo e, logo depois,
+  // fazíamos o que pode desprotegê-lo.
   //
-  // O portal então recusava com "O valor do campo Nome do profissional
-  // solicitante é obrigatório" — 24 vezes em 7 dias, o erro mais frequente do
-  // robô, mesmo com a proteção de 25/09 no lugar.
+  // HONESTIDADE SOBRE A EVIDÊNCIA: quando isto entrou, em 17/11/2026, atribuí
+  // a ele 24 falhas de "Nome do profissional solicitante é obrigatório". Era
+  // falso — aquelas 24 eram erro de classificação do robô (ele lia o atributo
+  // `msg-required` do HTML; ver o bloco de detecção mais abaixo), e em pelo
+  // menos um caso conferido o campo estava preenchido na tela. Não há caso
+  // medido que esta repetição tenha corrigido.
   //
-  // As duas funções saem na hora quando o campo já está certo, então repetir
-  // aqui custa quase nada e fecha a janela entre a proteção e o clique.
+  // Fica porque as duas funções são idempotentes e saem na hora quando o
+  // campo já está certo: custa quase nada e fecha a janela entre a proteção e
+  // o clique. É precaução barata, não conserto de bug conhecido.
   await garantirSolicitantePreenchido(page, config, input);
   await garantirIndicacaoClinicaPreenchida(page, input);
 
@@ -186,21 +190,60 @@ export async function finalizarGuia(
 
   // PRIMEIRO: detecta se há erro de validação visível.
   // Se houver, o número de #NR_GUIA é apenas RESERVA, não confirmação.
-  // Mensagens típicas: faixa vermelha no topo do form com texto de erro.
+  //
+  // ONDE OLHAR — e por que isto já esteve errado.
+  //
+  // Até 17/11/2026 os padrões abaixo rodavam contra `page.content()`, o HTML
+  // CRU. Só que o SGU carrega, em CADA campo obrigatório do formulário, um
+  // atributo com o texto do erro que ELE MOSTRARIA se o campo estivesse vazio:
+  //
+  //   <input name="NM_PROFISSIONAL" value="GIOVANNA ..."
+  //          msg-required="O valor do campo Nome do profissional solicitante
+  //                        é obrigatório.">
+  //
+  // Esse atributo está lá sempre — com o campo preenchido ou não. Resultado: o
+  // padrão /valor do campo .* obrigat/ casava SEMPRE, e qualquer falha nesta
+  // tela era reportada como "campo obrigatório", com um trecho de HTML no
+  // lugar da mensagem. Foi assim que 4 tentativas seguidas de uma guia em
+  // 17/11 viraram "O valor do campo Nome do profissional solicitante é
+  // obrigatório" quando o campo estava preenchido e o erro real, na faixa
+  // vermelha, era outro: exceção na comunicação com o Autorizador.
+  //
+  // O próprio portal marca a faixa de erro com `td.MagnetoErrorDataTD` — o JS
+  // dele testa `$('.MagnetoErrorDataTD').is(":visible")`. É daí que lemos.
+  // Sem faixa, caímos no texto VISÍVEL da página (innerText), nunca no HTML
+  // cru: innerText não contém atributos, então nenhum `msg-required` entra.
   const conteudoInicial = await page.content();
+
+  const faixaErro = (
+    await page
+      .locator("td.MagnetoErrorDataTD")
+      .allInnerTexts()
+      .catch(() => [] as string[])
+  )
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const textoVisivel = await page
+    .evaluate(() => document.body.innerText || "")
+    .catch(() => "");
+
+  const ondeProcurar = faixaErro || textoVisivel.replace(/\s+/g, " ").trim();
+
   const padroesErro: { regex: RegExp; nome: string }[] = [
     // "Erro na comunicação com o servidor de validação / Ocorreu uma exceção na
     // comunicação com o Autorizador."
     //
     // O Autorizador é o serviço que o SGU CHAMA para validar a guia; não é o
     // portal. Essa tela significa que ESSA chamada estourou — e isso convive
-    // com o portal funcionando normalmente no resto, inclusive para a mesma
-    // pessoa, no mesmo minuto. **Não presuma indisponibilidade geral**: em
-    // 17/11/2026 a colaboradora viu essa tela e o portal estava normal.
+    // com o portal funcionando normalmente no resto, inclusive no mesmo
+    // minuto, para outros pacientes. **Não presuma indisponibilidade geral**:
+    // em 17/11/2026 a colaboradora viu essa tela e o portal estava normal; a
+    // guia era de beneficiário de outra Unimed (carteira 0027, intercâmbio).
     //
     // Vem PRIMEIRO na lista porque senão os padrões genéricos abaixo a
-    // capturam e a classificam como "campo obrigatório", mandando conferir
-    // cadastro — que não tem nada a ver.
+    // capturam e a classificam como "campo obrigatório".
     {
       regex: /comunica[çc][ãa]o com o (?:servidor de valida[çc][ãa]o|Autorizador)/i,
       nome: "AUTORIZADOR_INDISPONIVEL",
@@ -213,16 +256,19 @@ export async function finalizarGuia(
   ];
 
   for (const { regex, nome } of padroesErro) {
-    const match = conteudoInicial.match(regex);
+    const match = ondeProcurar.match(regex);
     if (match) {
-      // Pega contexto ao redor do erro
+      // Com faixa, a mensagem É a faixa inteira — é exatamente o que a
+      // colaboradora lê na tela. Sem faixa, recortamos o contexto ao redor.
       const idx = match.index || 0;
-      const trecho = conteudoInicial
-        .substring(Math.max(0, idx - 100), idx + 400)
-        .replace(/<[^>]+>/g, " ")
-        .replace(/\s+/g, " ")
-        .trim();
-      logger.error({ tipoErro: nome, trecho }, "erro de validação detectado pelo portal");
+      const trecho = faixaErro
+        ? faixaErro
+        : ondeProcurar.substring(Math.max(0, idx - 100), idx + 400).trim();
+
+      logger.error(
+        { tipoErro: nome, trecho, origem: faixaErro ? "faixa-de-erro" : "texto-visivel" },
+        "erro de validação detectado pelo portal"
+      );
 
       // Dump pra inspeção
       try {
@@ -238,25 +284,23 @@ export async function finalizarGuia(
       }
 
       // Não é "portal rejeitou o preenchimento": a validação externa estourou.
-      // A mensagem diz o que de fato sabemos e NÃO manda esperar — pode ser
-      // específico desta guia, não do portal inteiro. Também não afirma que
-      // nada foi gravado: numa exceção do Autorizador o SGU pode ter deixado a
-      // guia reservada, então o primeiro passo é conferir antes de repetir,
-      // para não duplicar.
+      // Não manda esperar — pode ser só desta guia, não do portal inteiro. E
+      // não afirma que nada foi gravado: o primeiro passo é conferir, para não
+      // duplicar. (No caso de 17/11 o HTML trazia cdGuia vazio: nada gravado.)
       if (nome === "AUTORIZADOR_INDISPONIVEL") {
         throw new Error(
           "AUTORIZADOR_INDISPONIVEL: o SGU não conseguiu falar com o Autorizador (o serviço que " +
             "valida a guia). Isso não é erro de preenchimento — e pode acontecer só nesta guia, " +
-            "com o portal funcionando normalmente no resto. ANTES de repetir, confira na lista de " +
-            "guias se esta já foi criada, para não gerar duplicada. Se repetir e cair aqui de novo, " +
-            `é caso de abrir chamado na Unimed. Mensagem do portal: "${trecho}".`
+            "com o portal funcionando normalmente no resto. É mais comum em beneficiário de outra " +
+            "Unimed (intercâmbio). ANTES de repetir, confira na lista de guias se esta já foi " +
+            "criada, para não gerar duplicada. Se repetir e cair aqui de novo, é caso de abrir " +
+            `chamado na Unimed citando a carteira do paciente. Mensagem do portal: "${trecho}".`
         );
       }
 
       throw new Error(`FINALIZACAO_FALHOU: portal rejeitou a finalização. Mensagem: "${trecho}". A guia NÃO foi salva.`);
     }
   }
-
   let numeroGuia: string | null = null;
   let senhaAutorizacao: string | null = null;
   let situacaoGuia: "APROVADO" | "EM_ANALISE" | "NEGADA" = "APROVADO";

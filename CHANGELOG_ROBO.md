@@ -6,6 +6,49 @@
 
 ## 17/11/2026
 
+### O robô lia um atributo do HTML e chamava de erro da tela
+**Arquivo:** `unimed-mvp-final/src/finalizar.ts`
+
+O dump de uma guia que falhou 4 vezes seguidas (17/11, beneficiário de carteira 0027) mostrou o
+campo `NM_PROFISSIONAL` **preenchido** — e mesmo assim o robô gravou "O valor do campo Nome do
+profissional solicitante é obrigatório".
+
+A causa: os padrões de erro rodavam contra `page.content()`, o HTML cru. O SGU carrega em cada
+campo obrigatório um atributo com o texto do erro que ele mostraria se o campo estivesse vazio:
+
+```html
+<input name="NM_PROFISSIONAL" value="GIOVANNA ..."
+       msg-required="O valor do campo Nome do profissional solicitante é obrigatório.">
+```
+
+Esse atributo está lá **sempre**. Então `/valor do campo .* obrigat/` casava sempre, e qualquer
+falha nessa tela virava "campo obrigatório" — com um pedaço de HTML no lugar da mensagem. É
+exatamente o que está gravado nos 24 jobs:
+`" name="NM_PROFISSIONAL" id="NM_PROFISSIONAL" readonly="" maxlength="255"...`.
+
+O erro real daquela guia estava na faixa vermelha, que o robô nunca leu: **"Erro na comunicação
+com o servidor de validação. Ocorreu uma exceção na comunicação com o Autorizador."**
+
+Agora lemos `td.MagnetoErrorDataTD` — o marcador que o próprio JS do portal usa
+(`$('.MagnetoErrorDataTD').is(":visible")`) — e, sem faixa, o `innerText` da página. Nunca o
+HTML cru. Medido contra a tela real:
+
+```
+page.content()     -> casa "campo obrigatorio": true    (com o campo PREENCHIDO)
+faixa / innerText  -> casa "campo obrigatorio": false
+faixa / innerText  -> casa "Autorizador":       true
+```
+
+A mensagem que vai para o banco passou a ser a faixa inteira: exatamente o que a colaboradora
+lê na tela.
+
+### Sobre o commit anterior de hoje: a premissa estava errada
+Eu tinha atribuído as 24 falhas à ordem das garantias (`garantirSolicitantePreenchido` rodando
+antes de `garantirProfissionalExecutante`). Não era isso — eram essas classificações falsas. A
+repetição das garantias antes do clique **fica**, porque são idempotentes e custam quase nada,
+mas como precaução, não como conserto de bug medido. O comentário no código foi corrigido.
+
+
 ### Protíamos o campo do médico e, logo depois, fazíamos o que o desprotege
 **Arquivo:** `unimed-mvp-final/src/finalizar.ts`
 
