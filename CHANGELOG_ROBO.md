@@ -4,6 +4,16 @@
 
 ---
 
+## 17/11/2026 (noite, 11)
+
+### Verificacao de guias em analise ignora a Casacaresc
+**Arquivos:** `servidor-local/src/verificador.ts`
+
+O cron de 4h consulta guias em analise no portal da Unimed. Guia Casacaresc em analise fica de fora:
+consultar no portal errado daria "nao encontrada". Unimed e SC Saude sem mudanca.
+
+---
+
 ## 17/11/2026 (noite, 10)
 
 ### Casacaresc: robo autoriza sozinho e grava a guia no CRM
