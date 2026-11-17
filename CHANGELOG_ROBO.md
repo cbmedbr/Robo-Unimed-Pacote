@@ -4,6 +4,19 @@
 
 ---
 
+## 17/11/2026 (noite, 12)
+
+### Casacaresc: espera o portal processar a guia
+**Arquivos:** `robo-casacaresc/robo.py`
+
+Primeira autorizacao automatica (Andreia) mostrou o motivo de nao ter numero no CRM: depois do
+Autorizar o portal responde "Guia enviada para processamento... aguarde nesta pagina para ver o
+resultado" e o robo lia a tela nesse instante. Agora espera ate `PROCESSAMENTO_MIN` (5) minutos o
+aviso sumir. Le o "No Guia Prestador" (formato do resumo). Sem palavra clara de desfecho, ou ainda
+processando, a guia vai como EM_ANALISE (nunca mais "aprovada" por palpite).
+
+---
+
 ## 17/11/2026 (noite, 11)
 
 ### Verificacao de guias em analise ignora a Casacaresc
