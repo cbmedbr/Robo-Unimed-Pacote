@@ -27,7 +27,6 @@ URL_NOVA_GUIA = URL_BASE + "/Guias/SpSadt/NovaGuiaEletiva"
 
 EMAIL = os.getenv("EMAIL", "").strip()
 SENHA = os.getenv("SENHA", "").strip()
-MODO_TESTE = os.getenv("MODO_TESTE", "sim").strip().lower() in ("sim", "s", "true", "1", "yes")
 CODIGO_TIPICO = os.getenv("CODIGO_TIPICO", "50000470").strip()
 CODIGO_TEA = os.getenv("CODIGO_TEA", "225000286").strip()
 EXECUTANTE = os.getenv("EXECUTANTE", "LUCIANO NOCETI E VIEIRA - MATRIZ").strip()
@@ -368,19 +367,24 @@ def conferir_resumo(page, p):
     return problemas
 
 
-def autorizar(page):
-    btn = page.locator("button:visible, a:visible, input[type=submit]:visible") \
-              .filter(has_text=re.compile(r"Autorizar", re.I)).last
-    btn.scroll_into_view_if_needed()
-    btn.click()
-    try:
-        page.wait_for_load_state("networkidle", timeout=60000)
-    except PWTimeout:
-        pass
-    time.sleep(3)
+def aguardar_conferencia_humana(page, p):
+    """O robo NAO clica em Autorizar. Para no resumo e espera a pessoa conferir e clicar."""
+    print()
+    print("=" * 64)
+    print(f"  CONFIRA A GUIA NO NAVEGADOR: {p['paciente'] or p['carteirinha']}")
+    print(f"  {p['profissional']} | {p['tipo']} {p['codigo']} | {p['quantidade']} sessoes")
+    print("  Se estiver tudo certo, clique em AUTORIZAR no portal.")
+    print("  Depois volte aqui e aperte ENTER para ir ao proximo paciente.")
+    print("  (Se NAO quiser autorizar esta, digite P e ENTER para pular.)")
+    print("=" * 64)
+    resp = input("> ").strip().lower()
+    if resp.startswith("p"):
+        return "PULADO", "", "Pessoa decidiu nao autorizar na conferencia."
+    time.sleep(1)
     texto = page.locator("body").inner_text()
     m = re.search(r"(?:guia|n[uú]mero|senha)[^\d]{0,40}(\d{5,})", texto, re.I)
-    return (m.group(1) if m else ""), texto
+    numero = m.group(1) if m else ""
+    return ("AUTORIZADO" if numero else "CONFERIDO"), numero, re.sub(r"\s+", " ", texto)[:300]
 
 
 # ------------------------------------------------------------------ principal
@@ -402,14 +406,13 @@ def processar(page, p):
     passo5_anexos(page, p)
     problemas = conferir_resumo(page, p)
     if problemas:
-        return "CONFERIR", "", "Resumo com divergencia: " + "; ".join(problemas), print_tela(page, p, "divergencia")
-    if MODO_TESTE:
-        return "TESTE_OK", "", "Tudo certo ate o resumo. Nao clicou em Autorizar (MODO_TESTE=sim).", \
-               print_tela(page, p, "resumo")
-    numero, texto = autorizar(page)
-    status = "AUTORIZADO" if numero else "ENVIADO"
-    msg = re.sub(r"\s+", " ", texto)[:300]
-    return status, numero, msg, print_tela(page, p, "autorizado")
+        print_tela(page, p, "divergencia")
+        print("\n  !!! ATENCAO: o robo achou diferenca no resumo: " + "; ".join(problemas))
+        print("  !!! Corrija na tela antes de autorizar, ou pule este paciente.")
+    status, numero, msg = aguardar_conferencia_humana(page, p)
+    if problemas:
+        msg = "Divergencia apontada pelo robo: " + "; ".join(problemas) + " | " + msg
+    return status, numero, msg, print_tela(page, p, "depois_conferencia")
 
 
 def main():
@@ -420,7 +423,7 @@ def main():
     if sem_qtd:
         sys.exit("Linhas sem quantidade e sem dias_semana: " + ", ".join(str(p["linha"]) for p in sem_qtd))
 
-    log(f"{len(pacientes)} paciente(s) na planilha. MODO_TESTE={'SIM (nao autoriza)' if MODO_TESTE else 'NAO (vai autorizar de verdade)'}")
+    log(f"{len(pacientes)} paciente(s) na planilha. O robo preenche e PARA no resumo; quem clica em Autorizar e voce.")
     PASTA_RESULT.mkdir(exist_ok=True)
 
     wb = Workbook()
