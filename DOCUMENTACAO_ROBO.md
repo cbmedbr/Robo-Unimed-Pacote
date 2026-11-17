@@ -735,3 +735,19 @@ Robô **Python + Playwright** em `robo-casacaresc/`, disparado pelo mesmo servid
   senha uma vez, em `robo-casacaresc/.env`). Nunca bloqueia o servidor. Sem `.env`, o job falha com
   `CASACARESC_SEM_SENHA`.
 
+### 10.1 Guia em análise e checagem de 4 em 4 horas (17/11/2026)
+
+- Depois do Autorizar o portal mostra "Guia enviada para processamento"; o robô espera até
+  `PROCESSAMENTO_MIN` (5) minutos e lê o **Nº Guia Prestador** no resumo.
+- Em seguida consulta **Pesquisa de Guias** (`/Guias/PesquisaGuia/PesquisaGuias`): filtra pelo Nº Guia
+  Prestador a partir da data da solicitação, clica Pesquisar e lê a linha (Situação e Nº Guia
+  Operadora). Situação: "Autorizada" → APROVADO; "Negada/Indeferida/Cancelada" → NEGADA; o resto
+  (ex.: "Em análise") → EM_ANALISE.
+- No CRM: `codigo_guia` = Nº Guia Operadora (senão o do prestador); `numero_guia_unimed` do job = Nº Guia
+  Prestador (chave da checagem). EM_ANALISE gera job `sucesso_em_analise` e guia `em_analise`; a aba
+  Guias Casacaresc bloqueia novo pedido do paciente enquanto isso.
+- **Checagem:** `servidor-local/src/casacaresc-verificador.ts`, chamada no início de
+  `verificarJobsEmAnalise` (cron de 4h e botão "verificar todas") e por `verificarUmaGuia` quando o job é
+  Casacaresc. Sem prazo: segue até Autorizada (guia vira `ativa` com o nº da operadora) ou Negada (guia
+  `negada`, job `negado`). Roda `robo.py --verificar lista.json` com perfil de navegador próprio
+  (`perfil_verificacao/`) para não colidir com uma autorização em andamento.

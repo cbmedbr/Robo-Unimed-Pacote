@@ -4,6 +4,19 @@
 
 ---
 
+## 17/11/2026 (noite, 13)
+
+### Casacaresc: guia em analise e checagem de 4 em 4 horas
+**Arquivos:** `robo-casacaresc/robo.py`, `servidor-local/src/{casacaresc-verificador,verificador,executor,types}.ts`,
+`.gitignore`, `DOCUMENTACAO_ROBO.md`
+
+Pedido da operacao: guia Casacaresc em analise e conferida a cada 4h, sem prazo, ate Autorizada ou
+Negada, e o CRM bloqueia novo pedido enquanto isso. O robo consulta a Pesquisa de Guias pelo No Guia
+Prestador (desde a data da solicitacao) e le Situacao + No Guia Operadora; isso vale tambem logo
+depois de autorizar. Detalhes na secao 10.1 da documentacao.
+
+---
+
 ## 17/11/2026 (noite, 12)
 
 ### Casacaresc: espera o portal processar a guia

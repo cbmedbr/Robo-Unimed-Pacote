@@ -18,5 +18,6 @@ dist/
 # sao dados de cada PC e contem dados de pacientes. Repositorio PUBLICO.
 robo-casacaresc/resultados/
 robo-casacaresc/perfil_navegador/
+robo-casacaresc/perfil_verificacao/
 __pycache__/
 robo-casacaresc/.python-path

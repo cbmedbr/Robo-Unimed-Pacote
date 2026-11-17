@@ -64,6 +64,8 @@ export interface ResultadoRobo {
   data_emissao_sgu?: string;
   /** Casacaresc: datas lidas no recibo do portal (AAAA-MM-DD). */
   data_autorizacao?: string | null;
+  /** Casacaresc: Nº Guia Operadora (vira o código da guia no CRM). */
+  numero_operadora?: string | null;
   data_validade?: string | null;
   mes_utilizacao?: string;
   comprovante_path?: string;
