@@ -47,6 +47,31 @@ PASTA_PRINTS = PASTA / "resultados" / "prints"
 PERFIL = PASTA / "perfil_navegador"
 
 
+
+JS_MARCAR_QTD = """(codigo) => {
+  const vis = el => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+  let alvo = null;
+  for (const el of document.querySelectorAll('input, textarea, span, div, td, label, p, li')) {
+    if (!vis(el)) continue;
+    const valor = (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') ? (el.value || '') : '';
+    const texto = el.children.length === 0 ? (el.textContent || '') : '';
+    const t = valor || texto;
+    if (t.includes(codigo) && t.includes('|')) alvo = el;
+  }
+  if (!alvo) return false;
+  document.querySelectorAll('[data-robo-qtd]').forEach(e => e.removeAttribute('data-robo-qtd'));
+  const campos = Array.from(document.querySelectorAll('input')).filter(i =>
+    vis(i) && !['hidden', 'checkbox', 'radio', 'button', 'submit'].includes(i.type) && i !== alvo);
+  for (const i of campos) {
+    if (alvo.compareDocumentPosition(i) & Node.DOCUMENT_POSITION_FOLLOWING) {
+      i.setAttribute('data-robo-qtd', '1');
+      return true;
+    }
+  }
+  return false;
+}"""
+
+
 class ErroRobo(Exception):
     def __init__(self, codigo, mensagem):
         super().__init__(mensagem)
@@ -293,13 +318,24 @@ def passo3_procedimento(page, p):
             linha.first.click()
             time.sleep(1.5)
 
-    item = page.locator(f"xpath=//*[contains(normalize-space(.), '{codigo} |') and "
-                        f"not(.//*[contains(normalize-space(.), '{codigo} |')])]").first
-    item.wait_for(timeout=15000)
-    campo_qtd = item.locator("xpath=following::input[not(@type='hidden')][1]")
+    # O item escolhido aparece numa caixa cinza ("50000470 | Sessao de ...") que
+    # pode ser texto OU o valor de um campo. A quantidade e o primeiro campo
+    # visivel depois dele. Marca esse campo e preenche (ate 15s esperando).
+    achou = False
+    limite = time.time() + 15
+    while time.time() < limite and not achou:
+        achou = page.evaluate(JS_MARCAR_QTD, codigo)
+        if not achou:
+            time.sleep(0.5)
+    if not achou:
+        raise RuntimeError(f"O procedimento {codigo} nao apareceu na lista depois da pesquisa.")
+    campo_qtd = page.locator("[data-robo-qtd='1']").first
     campo_qtd.click()
     campo_qtd.fill(str(qtd))
     campo_qtd.press("Tab")
+    time.sleep(0.5)
+    if (campo_qtd.input_value() or "").strip() != str(qtd):
+        raise RuntimeError(f"Nao consegui trocar a quantidade para {qtd}.")
     time.sleep(0.8)
     clicar_proximo(page)
     esperar_passo(page, 4)
@@ -437,6 +473,11 @@ def print_tela(page, p, sufixo):
     arq = PASTA_PRINTS / f"{datetime.now():%Y%m%d_%H%M%S}_{p.get('job_id') or p.get('carteirinha')}_{sufixo}.png"
     try:
         page.screenshot(path=str(arq), full_page=True)
+        if sufixo == "erro":
+            try:
+                arq.with_suffix(".html").write_text(page.content(), encoding="utf-8")
+            except Exception:
+                pass
         return str(arq)
     except Exception:
         return None
