@@ -4,6 +4,19 @@
 
 ---
 
+## 17/11/2026 (noite, 9)
+
+### Casacaresc: quantidade nao era trocada no procedimento
+**Arquivos:** `robo-casacaresc/robo.py`
+
+Teste real parou no passo do procedimento ("Locator.wait_for: Timeout") sem trocar a quantidade: o
+item escolhido ("50000470 | Sessao de ...") nao e um texto solto como o robo procurava. Agora um script
+na pagina acha o item pelo texto OU pelo valor do campo, marca o primeiro campo visivel depois dele
+(a quantidade) e o robo preenche e confere que o valor ficou certo. No erro, alem do print, o robo
+salva o HTML da pagina em `resultados/prints/` (so no PC, fora do git) para diagnostico.
+
+---
+
 ## 17/11/2026 (noite, 8)
 
 ### Casacaresc: CBO escolhido pelo codigo 251510
