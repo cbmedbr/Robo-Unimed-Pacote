@@ -41,6 +41,7 @@ EXECUTANTE = os.getenv("EXECUTANTE", "LUCIANO NOCETI E VIEIRA - MATRIZ").strip()
 # Windows (PowerShell le o arquivo como ANSI) e o robo nao achava a opcao.
 CBO_CODIGO = re.sub(r"\D", "", os.getenv("CBO_CODIGO", "251510")) or "251510"
 LENTIDAO_MS = int(os.getenv("LENTIDAO_MS", "150"))
+PROCESSAMENTO_MIN = int(os.getenv("PROCESSAMENTO_MIN", "5"))
 HEADLESS = False  # conferencia humana: a janela precisa aparecer sempre
 
 PASTA_PRINTS = PASTA / "resultados" / "prints"
@@ -459,7 +460,7 @@ def ler_recibo(page, p):
         r"Guia\s+Atribu[ií]do\s+pela\s+Operadora\s*[:\-]?\s*(\d{4,})",
         r"N[º°o]?\.?\s*(?:da\s+)?Guia\s+(?:na|da)\s+Operadora\s*[:\-]?\s*(\d{4,})",
     ])
-    numero_prestador = achar([r"N[º°o]?\.?\s*(?:da\s+)?Guia\s+(?:no|do)\s+Prestador\s*[:\-]?\s*(\d{4,})"])
+    numero_prestador = achar([r"N[º°o]?\.?\s*(?:da\s+)?Guia\s+(?:no\s+|do\s+)?Prestador\s*[:\-]?\s*(\d{4,})"])
     numero_generico = achar([r"N[uú]mero\s+da\s+Guia\s*[:\-]?\s*(\d{4,})", r"\bGuia\s*(?:n[º°o.]*)?\s*[:\-]\s*(\d{4,})"])
     senha = achar([r"\bSenha\s*[:\-]?\s*([A-Z0-9]{4,})"])
     m_id = re.search(r"[?&]id=(\d{5,})", page.url)
@@ -477,10 +478,13 @@ def ler_recibo(page, p):
 
     if re.search(r"\b(negad[ao]|indeferid[ao])\b", t):
         situacao = "NEGADA"
-    elif re.search(r"em (analise|auditoria|estudo)|aguardando (analise|auditoria)", t):
+    elif re.search(r"em (analise|auditoria|estudo)|aguardando (analise|auditoria)|enviada para processamento", t):
         situacao = "EM_ANALISE"
-    else:
+    elif re.search(r"\bautorizad[ao]\b|\baprovad[ao]\b", t):
         situacao = "APROVADO"
+    else:
+        # Sem palavra clara de desfecho: nao da para dizer que liberou.
+        situacao = "EM_ANALISE"
     return {
         "numero": numero, "senha": senha, "data_autorizacao": data_aut, "data_validade": validade,
         "quantidade_autorizada": qtd_aut, "situacao": situacao,
@@ -530,7 +534,28 @@ def autorizar_sozinho(page, ctx, p, problemas):
     except Exception:
         pass
     time.sleep(2)
+
+    # O portal responde "Guia enviada para processamento... aguarde nesta pagina
+    # para ver o resultado" e so depois mostra o desfecho. Espera na pagina ate
+    # o aviso sumir (ate PROCESSAMENTO_MIN). Se nao sumir, a guia segue como em
+    # analise e a checagem de 4 em 4 horas resolve depois.
+    limite = time.time() + PROCESSAMENTO_MIN * 60
+    while time.time() < limite and em_processamento(recibo):
+        log("Portal processando a guia, aguardando o resultado...")
+        time.sleep(10)
+    try:
+        recibo.wait_for_load_state("networkidle", timeout=20000)
+    except Exception:
+        pass
+    time.sleep(2)
     return recibo
+
+
+def em_processamento(pg):
+    try:
+        return "enviada para processamento" in sem_acento(pg.locator("body").inner_text())
+    except Exception:
+        return False
 
 
 def print_tela(page, p, sufixo):
@@ -593,9 +618,10 @@ def main():
                     Path(comprovante).with_suffix(".html").write_text(recibo.content(), encoding="utf-8")
                 except Exception:
                     pass
-                faltou = [n for n, v in (("numero da guia", dados["numero"]),
-                                         ("data de autorizacao", dados["data_autorizacao"]),
-                                         ("validade", dados["data_validade"])) if not v]
+                campos = [("numero da guia", dados["numero"])]
+                if dados["situacao"] == "APROVADO":
+                    campos += [("data de autorizacao", dados["data_autorizacao"]), ("validade", dados["data_validade"])]
+                faltou = [n for n, v in campos if not v]
                 obs = ("Guia autorizada pelo robo, mas ele nao leu na tela: " + ", ".join(faltou) +
                        ". Confira no comprovante anexado.") if faltou else None
                 log(f"Autorizada: guia {dados['numero']} | aut {dados['data_autorizacao']} | "
