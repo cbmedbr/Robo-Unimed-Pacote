@@ -17,6 +17,12 @@ import { supabase } from "./supabase.js";
 import type { UnimedJob, InputAutorizacaoRobo, ResultadoRobo } from "./types.js";
 import { operadoraDoJob, COMANDO_POR_OPERADORA, type Operadora } from "./operadora.js";
 import { jobParaInputScSaude, ErroPreparoScSaude } from "./scsaude-job.js";
+import {
+  jobParaInputCasacaresc,
+  ErroPreparoCasacaresc,
+  PASTA_CASACARESC,
+  pythonCasacaresc,
+} from "./casacaresc-job.js";
 
 const PASTA_TEMP = path.join(os.tmpdir(), "unimed-jobs");
 const PASTA_DUMPS = path.join(os.tmpdir(), "unimed-dumps");
@@ -360,7 +366,11 @@ export async function executarJob(jobId: string): Promise<void> {
 
     // 4. Converte job → input do robô do portal certo
     const { input, pdfLocalPath } =
-      operadora === "scsaude" ? await jobParaInputScSaude(job) : await jobParaInputRobo(job);
+      operadora === "scsaude"
+        ? await jobParaInputScSaude(job)
+        : operadora === "casacaresc"
+          ? await jobParaInputCasacaresc(job)
+          : await jobParaInputRobo(job);
 
     // 5. Salva input em arquivo JSON temporário
     const inputPath = path.join(PASTA_TEMP, `${jobId}-input.json`);
@@ -386,7 +396,8 @@ export async function executarJob(jobId: string): Promise<void> {
     const prefixo = /^([A-Z][A-Z0-9_]{4,}):/.exec(mensagem);
 
     // O preparo do SC Saude carrega o codigo numa propriedade, nao no texto.
-    const codigoPreparo = e instanceof ErroPreparoScSaude ? e.codigo : null;
+    const codigoPreparo =
+      e instanceof ErroPreparoScSaude || e instanceof ErroPreparoCasacaresc ? e.codigo : null;
 
     resultado = {
       sucesso: false,
@@ -438,15 +449,31 @@ function rodarSubprocesso(
     // O SC Saude para e espera a pessoa conferir antes de emitir. Com o
     // timeout da Unimed, o servidor mataria o robo no meio da conferencia e
     // fecharia a janela com a guia preenchida na frente dela.
-    const timeoutMs = operadora === "scsaude" ? config.scsaudeTimeoutMs : config.roboTimeoutMs;
+    const timeoutMs =
+      operadora === "scsaude"
+        ? config.scsaudeTimeoutMs
+        : operadora === "casacaresc"
+          ? config.casacarescTimeoutMs
+          : config.roboTimeoutMs;
+
+    // Casacaresc é o robô Python em robo-casacaresc/. Ele lê a própria senha do
+    // .env da pasta dele (criado pelo preparar.bat) e devolve o mesmo
+    // "=== RESULTADO ===" que o robô TypeScript, então o resto daqui vale igual.
+    const py = pythonCasacaresc();
+    const [exe, argv, pasta] =
+      operadora === "casacaresc"
+        ? [py.cmd, [...py.args, "-u", path.join(PASTA_CASACARESC, "robo.py"), "--input", inputPath], PASTA_CASACARESC]
+        : [process.execPath, [tsxCli, scriptPath, comando, "--input", inputPath], config.roboCaminho];
 
     const proc = spawn(
-      process.execPath,
-      [tsxCli, scriptPath, comando, "--input", inputPath],
+      exe,
+      argv,
       {
-        cwd: config.roboCaminho,
+        cwd: pasta,
         env: {
           ...process.env,
+          // Robô Python: sem isto o console do Windows quebra ao imprimir acento.
+          PYTHONIOENCODING: "utf-8",
           UNIMED_USUARIO: config.unimedUsuario,
           UNIMED_SENHA: config.unimedSenha,
           // Só vão quando a máquina tem: o robô recusa com CONFIG_AUSENTE e
@@ -631,9 +658,9 @@ async function atualizarJobComResultado(
       // O adaptador do SC Saúde não devolve esses campos — o ciclo mensal da
       // Unimed (data de emissão no SGU, mês de utilização) não existe lá.
       // Mandar a colaboradora "atualizar a máquina" seria instrução errada.
-      if (operadoraDoJob(job) === "scsaude") {
+      if (operadoraDoJob(job) !== "unimed") {
         console.log(
-          `[${jobId}] SC Saúde não devolve ciclo mensal — calculando aqui pela regra da clínica.`
+          `[${jobId}] ${operadoraDoJob(job)} não devolve ciclo mensal — calculando aqui pela regra da clínica.`
         );
       } else {
         console.error(

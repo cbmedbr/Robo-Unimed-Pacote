@@ -700,3 +700,29 @@ para **calcular a quantidade**, só não entram mais no texto.
 | `types.ts` | Tipos do servidor |
 | `config.ts` | Leitura de .env |
 | `supabase.ts` | Cliente Supabase |
+
+## 10. Robô Casacaresc (portal Benner Conecta)
+
+Robô **Python + Playwright** em `robo-casacaresc/`, disparado pelo mesmo servidor local.
+
+- **Roteamento:** `operadoraDoJob` devolve `casacaresc` quando o plano do job casa com
+  `/casa\s*caresc/` (sem acento, sem caixa). Antes disso esses pacientes caíam no default Unimed.
+- **Preparo do job:** `servidor-local/src/casacaresc-job.ts`. Categoria `tipico` → `50000470`,
+  `aba` → `225000286`; outras recusam com `PROCEDIMENTO_SEM_EQUIVALENTE`. Carteirinha do snapshot
+  (fallback no cadastro). Solicitante = `psicologo_executante_nome` (o psicólogo, com CRP).
+  Quantidade = `procedimento_quantidade` calculada pelo CRM.
+- **Execução:** `python robo.py --input <json>`, cwd `robo-casacaresc/`, timeout
+  `CASACARESC_TIMEOUT_MS` (25 min). O Python vem de `robo-casacaresc/.python-path`, gravado pelo
+  `preparar.bat`.
+- **Fluxo no portal:** login → Nova Guia Eletiva SP/SADT → carteirinha + lupa → solicitante
+  (psicólogo, via "Selecionar outro..." se preciso) → CBO 251510 Psicólogo clínico → procedimento +
+  quantidade → executante LUCIANO NOCETI E VIEIRA - MATRIZ → sem anexo → resumo.
+- **Conferência humana obrigatória:** o robô NUNCA clica em Autorizar. Para no resumo com uma faixa
+  no topo e espera até `CONFERENCIA_MIN` (15) a pessoa clicar. Janela fechada →
+  `CONFERENCIA_CANCELADA`; tempo esgotado → `CONFERENCIA_NAO_CONCLUIDA`. Nenhuma guia é emitida nesses casos.
+- **Resultado:** mesmo contrato `=== RESULTADO ===` do robô TypeScript. Sem número legível na tela,
+  devolve sucesso com `observacao` pedindo conferência do comprovante.
+- **Preparo por PC:** `iniciar-servidor.bat` chama `robo-casacaresc/preparar.bat` (pip install e
+  senha uma vez, em `robo-casacaresc/.env`). Nunca bloqueia o servidor. Sem `.env`, o job falha com
+  `CASACARESC_SEM_SENHA`.
+
