@@ -5,6 +5,7 @@
 // o cron pula automaticamente (mas verificação manual via API continua disponível).
 
 import { spawn } from "node:child_process";
+import { operadoraDoJob } from "./operadora.js";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -48,7 +49,7 @@ export interface JobEmAnalise {
 export async function listarJobsEmAnalise(forcarTodos = false): Promise<JobEmAnalise[]> {
   let query = supabase
     .from("unimed_aprovacao_jobs")
-    .select("id, numero_guia_unimed, guia_id, paciente_nome_snapshot, created_at")
+    .select("id, numero_guia_unimed, guia_id, paciente_nome_snapshot, plano_saude_nome_snapshot, created_at")
     .eq("status", "sucesso_em_analise")
     .not("numero_guia_unimed", "is", null);
 
@@ -62,7 +63,11 @@ export async function listarJobsEmAnalise(forcarTodos = false): Promise<JobEmAna
     console.error("Erro ao listar jobs em análise:", error.message);
     return [];
   }
-  return (data ?? []) as JobEmAnalise[];
+  // A verificação consulta o portal da UNIMED. Guia em análise da Casacaresc é
+  // de outro portal: consultar lá daria "não encontrada" e bagunçaria a guia.
+  return ((data ?? []) as (JobEmAnalise & { plano_saude_nome_snapshot?: string | null })[]).filter(
+    (j) => operadoraDoJob({ plano_saude_nome_snapshot: j.plano_saude_nome_snapshot ?? "" }) !== "casacaresc"
+  );
 }
 
 // ============================================================================
