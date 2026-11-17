@@ -6,9 +6,10 @@ Clinica Luciano Noceti
 So recebe dados do CRM. Quem chama e o servidor-local (mesmo servidor do robo
 Unimed), com:   python robo.py --input pedido.json
 
-O robo preenche a guia e PARA no resumo. Quem clica em Autorizar e uma pessoa
-(conferencia humana obrigatoria). Depois do clique o robo le o resultado e
-devolve para o servidor, que grava no CRM.
+O robo preenche a guia, confere o resumo e, se tudo bater com o pedido, clica em
+Autorizar sozinho (decisao da operacao, 17/11/2026). Resumo diferente do pedido:
+NAO autoriza. Depois do clique le o recibo (numero, senha, datas, quantidade) e
+devolve para o servidor, que grava a guia no CRM.
 
 Saida: a ultima coisa impressa e "=== RESULTADO ===" seguida de um JSON, no
 mesmo contrato do robo Unimed/SC Saude (ver servidor-local/src/executor.ts).
@@ -40,7 +41,6 @@ EXECUTANTE = os.getenv("EXECUTANTE", "LUCIANO NOCETI E VIEIRA - MATRIZ").strip()
 # Windows (PowerShell le o arquivo como ANSI) e o robo nao achava a opcao.
 CBO_CODIGO = re.sub(r"\D", "", os.getenv("CBO_CODIGO", "251510")) or "251510"
 LENTIDAO_MS = int(os.getenv("LENTIDAO_MS", "150"))
-CONFERENCIA_MIN = int(os.getenv("CONFERENCIA_MIN", "15"))
 HEADLESS = False  # conferencia humana: a janela precisa aparecer sempre
 
 PASTA_PRINTS = PASTA / "resultados" / "prints"
@@ -416,56 +416,121 @@ def ainda_no_resumo(page):
         return False
 
 
-def ler_desfecho(page):
+JS_QTD_AUTORIZADA = r"""(codigo) => {
+  for (const tab of document.querySelectorAll('table')) {
+    const linhas = Array.from(tab.querySelectorAll('tr'));
+    const cab = linhas.find(tr => /qt[a-z]*\.?\s*aut/i.test(tr.textContent));
+    if (!cab) continue;
+    const col = Array.from(cab.children).findIndex(c => /qt[a-z]*\.?\s*aut/i.test(c.textContent));
+    if (col < 0) continue;
+    for (const tr of linhas) {
+      if (tr === cab) continue;
+      const t = tr.textContent || '';
+      if (t.includes(codigo) || /psicoterapia/i.test(t)) {
+        const v = ((tr.children[col] && tr.children[col].textContent) || '').trim();
+        if (/^\d+$/.test(v)) return parseInt(v, 10);
+      }
+    }
+  }
+  return null;
+}"""
+
+
+def _data_iso(br):
+    try:
+        return datetime.strptime(br, "%d/%m/%Y").strftime("%Y-%m-%d")
+    except Exception:
+        return None
+
+
+def ler_recibo(page, p):
+    """Le o que o portal mostrou depois do Autorizar. Nunca levanta erro."""
     texto = page.locator("body").inner_text()
     t = sem_acento(texto)
-    m = re.search(r"(?:n[uú]mero\s+da\s+guia|guia\s+(?:n[º°o.]*|numero)?|senha)[^\d]{0,40}(\d{5,})", texto, re.I)
-    numero = m.group(1) if m else ""
-    if not numero:
-        m2 = re.search(r"[?&]id=(\d{5,})", page.url)
-        numero = m2.group(1) if m2 else ""
+
+    def achar(padroes):
+        for pad in padroes:
+            m = re.search(pad, texto, re.I)
+            if m:
+                return m.group(1).strip()
+        return None
+
+    numero_operadora = achar([
+        r"Guia\s+Atribu[ií]do\s+pela\s+Operadora\s*[:\-]?\s*(\d{4,})",
+        r"N[º°o]?\.?\s*(?:da\s+)?Guia\s+(?:na|da)\s+Operadora\s*[:\-]?\s*(\d{4,})",
+    ])
+    numero_prestador = achar([r"N[º°o]?\.?\s*(?:da\s+)?Guia\s+(?:no|do)\s+Prestador\s*[:\-]?\s*(\d{4,})"])
+    numero_generico = achar([r"N[uú]mero\s+da\s+Guia\s*[:\-]?\s*(\d{4,})", r"\bGuia\s*(?:n[º°o.]*)?\s*[:\-]\s*(\d{4,})"])
+    senha = achar([r"\bSenha\s*[:\-]?\s*([A-Z0-9]{4,})"])
+    m_id = re.search(r"[?&]id=(\d{5,})", page.url)
+    numero = numero_operadora or numero_generico or numero_prestador or senha or (m_id.group(1) if m_id else None)
+
+    data_aut = _data_iso(achar([r"Data\s+(?:da|de)\s+Autoriza[çc][ãa]o\s*[:\-]?\s*(\d{2}/\d{2}/\d{4})"]) or "")
+    validade = _data_iso(achar([
+        r"Data\s+de\s+Validade\s+da\s+Senha\s*[:\-]?\s*(\d{2}/\d{2}/\d{4})",
+        r"Validade[^\d\n]{0,30}(\d{2}/\d{2}/\d{4})",
+    ]) or "")
+    try:
+        qtd_aut = page.evaluate(JS_QTD_AUTORIZADA, p["codigo"])
+    except Exception:
+        qtd_aut = None
+
     if re.search(r"\b(negad[ao]|indeferid[ao])\b", t):
         situacao = "NEGADA"
     elif re.search(r"em (analise|auditoria|estudo)|aguardando (analise|auditoria)", t):
         situacao = "EM_ANALISE"
     else:
         situacao = "APROVADO"
-    return numero, situacao, re.sub(r"\s+", " ", texto)[:400]
+    return {
+        "numero": numero, "senha": senha, "data_autorizacao": data_aut, "data_validade": validade,
+        "quantidade_autorizada": qtd_aut, "situacao": situacao,
+    }
 
 
-def aguardar_conferencia_humana(page, p, problemas):
-    aviso = (f"ROBO: confira a guia de {p['paciente'] or p['carteirinha']} "
-             f"({p['quantidade']} sessoes) e clique em AUTORIZAR. Se estiver errada, feche esta janela.")
+def autorizar_sozinho(page, ctx, p, problemas):
+    """Clica em Autorizar quando o resumo bate com o pedido e devolve a pagina do recibo.
+
+    Divergencia no resumo: NAO autoriza (erro RESUMO_DIVERGENTE). Depois do clique,
+    nunca devolve falha por causa da leitura: a guia pode ja existir na operadora, e
+    um "falhou" faria alguem pedir de novo e duplicar.
+    """
     if problemas:
-        banner(page, "ATENCAO, o robo achou diferenca: " + "; ".join(problemas) +
-               ". Corrija antes de autorizar ou feche a janela.", "#b91c1c")
-    else:
-        banner(page, aviso)
-    log("Guia preenchida. Esperando uma pessoa conferir e clicar em Autorizar...")
+        e = ErroRobo("RESUMO_DIVERGENTE",
+                     "O resumo do portal veio diferente do pedido (" + "; ".join(problemas) +
+                     "). O robo NAO autorizou. Confira o cadastro e peca de novo.")
+        e.shot = print_tela(page, p, "erro")
+        raise e
 
-    limite = time.time() + CONFERENCIA_MIN * 60
+    paginas_antes = set(ctx.pages)
+    btn = page.locator("button:visible, a:visible, input[type=submit]:visible") \
+              .filter(has_text=re.compile(r"^\s*Autorizar\s*$", re.I)).last
+    btn.scroll_into_view_if_needed()
+    log("Resumo conferido. Clicando em Autorizar...")
+    btn.click()
+
+    recibo = None
+    limite = time.time() + 90
     while time.time() < limite:
-        try:
-            if page.is_closed():
-                raise ErroRobo("CONFERENCIA_CANCELADA", "A janela foi fechada sem autorizar. Nenhuma guia foi emitida.")
-            if not ainda_no_resumo(page):
-                try:
-                    page.wait_for_load_state("networkidle", timeout=20000)
-                except PWTimeout:
-                    pass
-                time.sleep(2)
-                if ainda_no_resumo(page):
-                    continue  # portal so mostrou um aviso; segue esperando
-                return ler_desfecho(page)
-            time.sleep(2)
-        except ErroRobo:
-            raise
-        except Exception as e:
-            if "closed" in str(e).lower() or "target" in str(e).lower():
-                raise ErroRobo("CONFERENCIA_CANCELADA", "A janela foi fechada sem autorizar. Nenhuma guia foi emitida.")
-            time.sleep(2)
-    raise ErroRobo("CONFERENCIA_NAO_CONCLUIDA",
-                   f"Ninguem clicou em Autorizar em {CONFERENCIA_MIN} minutos. Nenhuma guia foi emitida, pode pedir de novo.")
+        novas = [pg for pg in ctx.pages if pg not in paginas_antes]
+        if novas:
+            recibo = novas[-1]
+            break
+        if not ainda_no_resumo(page):
+            recibo = page
+            break
+        time.sleep(1)
+    if recibo is None:
+        e = ErroRobo("AUTORIZAR_SEM_RESPOSTA",
+                     "Cliquei em Autorizar mas o portal nao saiu do resumo em 90s. "
+                     "CONFIRA NO PORTAL se a guia foi emitida antes de pedir de novo.")
+        e.shot = print_tela(page, p, "erro")
+        raise e
+    try:
+        recibo.wait_for_load_state("networkidle", timeout=30000)
+    except Exception:
+        pass
+    time.sleep(2)
+    return recibo
 
 
 def print_tela(page, p, sufixo):
@@ -519,27 +584,47 @@ def main():
                 etapa = "executante"; passo4_executante(page, p)
                 etapa = "anexos"; passo5_anexos(page, p)
                 etapa = "resumo"; problemas = conferir_resumo(page, p)
-                etapa = "conferencia_humana"
-                numero, situacao, texto = aguardar_conferencia_humana(page, p, problemas)
-                comprovante = print_tela(page, p, "comprovante")
-                obs = None
-                if not numero:
-                    obs = "Robo nao achou o numero da guia na tela depois do Autorizar. Confira o comprovante e preencha o numero."
-                if problemas:
-                    obs = ((obs + " ") if obs else "") + "Robo apontou diferenca no resumo antes do Autorizar: " + "; ".join(problemas)
+                etapa = "autorizar"
+                recibo = autorizar_sozinho(page, ctx, p, problemas)
+                etapa = "leitura_recibo"
+                dados = ler_recibo(recibo, p)
+                comprovante = print_tela(recibo, p, "comprovante")
+                try:
+                    Path(comprovante).with_suffix(".html").write_text(recibo.content(), encoding="utf-8")
+                except Exception:
+                    pass
+                faltou = [n for n, v in (("numero da guia", dados["numero"]),
+                                         ("data de autorizacao", dados["data_autorizacao"]),
+                                         ("validade", dados["data_validade"])) if not v]
+                obs = ("Guia autorizada pelo robo, mas ele nao leu na tela: " + ", ".join(faltou) +
+                       ". Confira no comprovante anexado.") if faltou else None
+                log(f"Autorizada: guia {dados['numero']} | aut {dados['data_autorizacao']} | "
+                    f"validade {dados['data_validade']} | qtd {dados['quantidade_autorizada']}")
                 resultado({
                     "sucesso": True,
-                    "numero_guia": numero or None,
-                    "situacao": situacao,
+                    "numero_guia": dados["numero"],
+                    "senha_autorizacao": dados["senha"],
+                    "situacao": dados["situacao"],
                     "observacao": obs,
                     "quantidade_solicitada": p["quantidade"],
-                    "quantidade_autorizada": None,
+                    "quantidade_autorizada": dados["quantidade_autorizada"],
+                    "data_autorizacao": dados["data_autorizacao"],
+                    "data_validade": dados["data_validade"],
                     "screenshot_comprovante_path": comprovante,
                     "duracao_ms": int((time.time() - inicio) * 1000),
                 })
             except ErroRobo:
                 raise
             except Exception as e:
+                if etapa == "leitura_recibo":
+                    # Autorizar ja foi clicado: a guia existe. Sucesso com recado, nunca falha.
+                    resultado({"sucesso": True, "numero_guia": None, "situacao": "APROVADO",
+                               "observacao": "Guia autorizada pelo robo, mas ele nao conseguiu ler o recibo. "
+                                             "Confira no portal e preencha numero e datas.",
+                               "quantidade_solicitada": p["quantidade"], "quantidade_autorizada": None,
+                               "screenshot_comprovante_path": None,
+                               "duracao_ms": int((time.time() - inicio) * 1000)})
+                    return
                 shot = print_tela(page, p, "erro") if not page.is_closed() else None
                 msg = str(e).splitlines()[0][:400] if str(e) else e.__class__.__name__
                 erro = ErroRobo("ERRO_" + etapa.upper(), f"Falhou na etapa '{etapa}': {msg}")

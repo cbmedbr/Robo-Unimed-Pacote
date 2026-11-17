@@ -544,6 +544,9 @@ function rodarSubprocesso(
             comprovante_path: parsed.screenshot_comprovante_path ?? undefined,
             quantidade_solicitada: parsed.quantidade_solicitada ?? null,
             quantidade_autorizada: parsed.quantidade_autorizada ?? null,
+            // Só o robô Casacaresc devolve: o executor usa só nesse plano.
+            data_autorizacao: parsed.data_autorizacao ?? null,
+            data_validade: parsed.data_validade ?? null,
             duracao_ms: parsed.duracao_ms ?? duracao,
           });
         } else {
@@ -675,9 +678,17 @@ async function atualizarJobComResultado(
     // "dia 1º / mês seguinte" da Unimed) e vale 60 dias corridos.
     const ehCasacaresc = operadoraDoJob(job) === "casacaresc";
 
+    // Casacaresc: a data de autorização lida no recibo vence a de hoje.
+    const dataAutCasa =
+      ehCasacaresc && /^\d{4}-\d{2}-\d{2}$/.test(resultado.data_autorizacao ?? "")
+        ? resultado.data_autorizacao!
+        : null;
+
     const ciclo = cicloRobo
       ? { dataEmissao: resultado.data_emissao_sgu!, mesUtilizacao: resultado.mes_utilizacao! }
-      : calcularCicloMensal(ehCasacaresc ? true : (job.is_primeira_guia ?? false));
+      : dataAutCasa
+        ? { dataEmissao: dataAutCasa, mesUtilizacao: dataAutCasa.slice(0, 8) + "01" }
+        : calcularCicloMensal(ehCasacaresc ? true : (job.is_primeira_guia ?? false));
 
     const dataEmissao = ciclo.dataEmissao;
     const mesUtilizacao = ciclo.mesUtilizacao;
@@ -689,9 +700,14 @@ async function atualizarJobComResultado(
     //     (cobre agosto + setembro inteiro + 7 dias em outubro)
     let dataValidade: string | undefined;
     if (!negada && ehCasacaresc) {
-      const v = new Date(dataEmissao + "T12:00:00");
-      v.setDate(v.getDate() + 60);
-      dataValidade = v.toISOString().slice(0, 10);
+      // Validade lida no recibo; sem leitura, 60 dias da autorização (regra da operação).
+      if (/^\d{4}-\d{2}-\d{2}$/.test(resultado.data_validade ?? "")) {
+        dataValidade = resultado.data_validade!;
+      } else {
+        const v = new Date(dataEmissao + "T12:00:00");
+        v.setDate(v.getDate() + 60);
+        dataValidade = v.toISOString().slice(0, 10);
+      }
     } else if (!negada) {
       const mesUtil = new Date(mesUtilizacao + "T12:00:00");
       if (job.is_primeira_guia) {
