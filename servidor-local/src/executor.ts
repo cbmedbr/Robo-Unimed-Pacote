@@ -671,9 +671,13 @@ async function atualizarJobComResultado(
       }
     }
 
+    // Casacaresc: a guia nasce no dia em que foi autorizada (sem a regra de
+    // "dia 1º / mês seguinte" da Unimed) e vale 60 dias corridos.
+    const ehCasacaresc = operadoraDoJob(job) === "casacaresc";
+
     const ciclo = cicloRobo
       ? { dataEmissao: resultado.data_emissao_sgu!, mesUtilizacao: resultado.mes_utilizacao! }
-      : calcularCicloMensal(job.is_primeira_guia ?? false);
+      : calcularCicloMensal(ehCasacaresc ? true : (job.is_primeira_guia ?? false));
 
     const dataEmissao = ciclo.dataEmissao;
     const mesUtilizacao = ciclo.mesUtilizacao;
@@ -684,7 +688,11 @@ async function atualizarJobComResultado(
     //     Ex: primeira guia em 25/ago → mes_utilizacao=ago → validade = 07/out
     //     (cobre agosto + setembro inteiro + 7 dias em outubro)
     let dataValidade: string | undefined;
-    if (!negada) {
+    if (!negada && ehCasacaresc) {
+      const v = new Date(dataEmissao + "T12:00:00");
+      v.setDate(v.getDate() + 60);
+      dataValidade = v.toISOString().slice(0, 10);
+    } else if (!negada) {
       const mesUtil = new Date(mesUtilizacao + "T12:00:00");
       if (job.is_primeira_guia) {
         const validadeDate = new Date(mesUtil.getFullYear(), mesUtil.getMonth() + 2, 7);
