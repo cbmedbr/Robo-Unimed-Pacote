@@ -4,6 +4,17 @@
 
 ---
 
+## 17/11/2026 (noite, 2)
+
+### CASACARESC: robo nao clica mais em Autorizar
+**Arquivos:** `robo-casacaresc/robo.py`, `robo-casacaresc/.env.exemplo`, `robo-casacaresc/LEIA-ME.txt`
+
+Pedido da operacao: conferencia humana obrigatoria. O robo preenche a guia, para no resumo e espera
+a pessoa conferir e clicar em Autorizar no portal; ENTER segue pro proximo paciente, P pula.
+Divergencias do resumo sao avisadas na tela. `MODO_TESTE` foi removido.
+
+---
+
 ## 17/11/2026 (noite)
 
 ### Novo robo: autorizacao de guias SP/SADT da CASACARESC
