@@ -722,6 +722,8 @@ Robô **Python + Playwright** em `robo-casacaresc/`, disparado pelo mesmo servid
   `CONFERENCIA_CANCELADA`; tempo esgotado → `CONFERENCIA_NAO_CONCLUIDA`. Nenhuma guia é emitida nesses casos.
 - **Resultado:** mesmo contrato `=== RESULTADO ===` do robô TypeScript. Sem número legível na tela,
   devolve sucesso com `observacao` pedindo conferência do comprovante.
+- **Guia no CRM:** nasce com `data_emissao` = dia da autorização e `data_validade` = emissão + 60
+  dias (regra do Casacaresc, não o ciclo mensal da Unimed).
 - **Preparo por PC:** `iniciar-servidor.bat` chama `robo-casacaresc/preparar.bat` (pip install e
   senha uma vez, em `robo-casacaresc/.env`). Nunca bloqueia o servidor. Sem `.env`, o job falha com
   `CASACARESC_SEM_SENHA`.

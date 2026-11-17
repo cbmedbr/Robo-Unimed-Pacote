@@ -4,6 +4,16 @@
 
 ---
 
+## 17/11/2026 (noite, 4)
+
+### Casacaresc: guia vale 60 dias a partir da autorização
+**Arquivos:** `servidor-local/src/executor.ts`, `DOCUMENTACAO_ROBO.md`
+
+Regra da operação: a guia Casacaresc vale 60 dias corridos. O servidor grava `data_emissao` = dia da
+autorização e `data_validade` = +60 dias, em vez do ciclo mensal da Unimed. Unimed e SC Saúde sem mudança.
+
+---
+
 ## 17/11/2026 (noite, 3)
 
 ### Casacaresc ligado ao CRM: o robô só recebe dados do CRM
