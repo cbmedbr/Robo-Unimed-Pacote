@@ -62,6 +62,9 @@ export interface ResultadoRobo {
   /** Qt. Autoriz. lida no portal — o que a Unimed liberou de fato. */
   quantidade_autorizada?: number | null;
   data_emissao_sgu?: string;
+  /** Casacaresc: datas lidas no recibo do portal (AAAA-MM-DD). */
+  data_autorizacao?: string | null;
+  data_validade?: string | null;
   mes_utilizacao?: string;
   comprovante_path?: string;
   /**

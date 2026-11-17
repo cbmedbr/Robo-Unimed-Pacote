@@ -717,13 +717,20 @@ Robô **Python + Playwright** em `robo-casacaresc/`, disparado pelo mesmo servid
 - **Fluxo no portal:** login → Nova Guia Eletiva SP/SADT → carteirinha + lupa → solicitante
   (psicólogo, via "Selecionar outro..." se preciso) → CBO pelo código 251510 (Psicólogo clínico) → procedimento +
   quantidade → executante LUCIANO NOCETI E VIEIRA - MATRIZ → sem anexo → resumo.
-- **Conferência humana obrigatória:** o robô NUNCA clica em Autorizar. Para no resumo com uma faixa
-  no topo e espera até `CONFERENCIA_MIN` (15) a pessoa clicar. Janela fechada →
-  `CONFERENCIA_CANCELADA`; tempo esgotado → `CONFERENCIA_NAO_CONCLUIDA`. Nenhuma guia é emitida nesses casos.
+- **Autoriza sozinho (desde 17/11/2026, decisão da operação):** no resumo o robô confere
+  profissional, CBO, executante, carteirinha e quantidade. Se tudo bater, clica em Autorizar. Se não
+  bater, NÃO autoriza e falha com `RESUMO_DIVERGENTE`. Se o portal não sair do resumo em 90s, falha com
+  `AUTORIZAR_SEM_RESPOSTA` (conferir no portal antes de pedir de novo). O recibo pode abrir na mesma aba
+  ou em aba nova; as duas são tratadas.
+- **Leitura do recibo:** número da guia (atribuído pela operadora; senão número da guia, guia no
+  prestador, senha ou `id` da URL), senha, data da autorização, validade da senha e Qtde. Aut. do item.
+  Print + HTML do recibo ficam em `resultados/prints/` e o print sobe como protocolo da guia. Depois do
+  clique em Autorizar o robô NUNCA devolve falha: o que não leu vai como `observacao` (evita pedir de
+  novo e duplicar a guia).
 - **Resultado:** mesmo contrato `=== RESULTADO ===` do robô TypeScript. Sem número legível na tela,
   devolve sucesso com `observacao` pedindo conferência do comprovante.
-- **Guia no CRM:** nasce com `data_emissao` = dia da autorização e `data_validade` = emissão + 60
-  dias (regra do Casacaresc, não o ciclo mensal da Unimed).
+- **Guia no CRM:** `codigo_guia` = número lido, `sessoes_autorizadas` = Qtde. Aut. lida (senão a pedida),
+  `data_emissao` = data da autorização lida (senão hoje), `data_validade` = validade lida (senão +60 dias).
 - **Preparo por PC:** `iniciar-servidor.bat` chama `robo-casacaresc/preparar.bat` (pip install e
   senha uma vez, em `robo-casacaresc/.env`). Nunca bloqueia o servidor. Sem `.env`, o job falha com
   `CASACARESC_SEM_SENHA`.

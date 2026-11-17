@@ -4,6 +4,19 @@
 
 ---
 
+## 17/11/2026 (noite, 10)
+
+### Casacaresc: robo autoriza sozinho e grava a guia no CRM
+**Arquivos:** `robo-casacaresc/robo.py`, `servidor-local/src/{executor,types}.ts`, `DOCUMENTACAO_ROBO.md`
+
+Pedido da operacao depois do primeiro teste bem-sucedido: tirar a conferencia humana. O robo clica em
+Autorizar quando o resumo bate com o pedido (diferenca = NAO autoriza, `RESUMO_DIVERGENTE`), le o
+recibo (numero, senha, data da autorizacao, validade, quantidade autorizada) e o servidor grava a
+guia no CRM com esses dados; o que nao for lido cai no padrao (hoje / +60 dias / quantidade pedida) e
+vira recado na guia. Depois do clique nunca devolve falha, para ninguem pedir de novo e duplicar.
+
+---
+
 ## 17/11/2026 (noite, 9)
 
 ### Casacaresc: quantidade nao era trocada no procedimento
