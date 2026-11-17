@@ -4,6 +4,19 @@
 
 ---
 
+## 17/11/2026 (noite, 8)
+
+### Casacaresc: CBO escolhido pelo codigo 251510
+**Arquivos:** `robo-casacaresc/robo.py`, `robo-casacaresc/.env.exemplo`
+
+Primeiro teste real parou em "Nao achei o CBO de psicologo clinico": o nome com acento vinha
+corrompido do `.env` (PowerShell 5 le o arquivo como ANSI). Agora o robo procura a opcao pelo codigo
+`251510` e espera ate 20s as opcoes carregarem depois de escolher o psicologo. Solicitante: so digita
+o nome e aperta Enter (sem lupa); se o Enter ja abrir o modal de busca, segue nele. O print do erro
+passou a ser tirado antes de fechar o navegador (antes saia `screenshot_path: null`).
+
+---
+
 ## 17/11/2026 (noite, 7)
 
 ### Casacaresc: Python instalado de verdade nos PCs que nao tem

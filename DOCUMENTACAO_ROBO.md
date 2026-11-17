@@ -715,7 +715,7 @@ Robô **Python + Playwright** em `robo-casacaresc/`, disparado pelo mesmo servid
   `CASACARESC_TIMEOUT_MS` (25 min). O Python vem de `robo-casacaresc/.python-path`, gravado pelo
   `preparar.bat` (que instala o Python via winget quando falta). Sem Python o job falha com `PYTHON_AUSENTE`.
 - **Fluxo no portal:** login → Nova Guia Eletiva SP/SADT → carteirinha + lupa → solicitante
-  (psicólogo, via "Selecionar outro..." se preciso) → CBO 251510 Psicólogo clínico → procedimento +
+  (psicólogo, via "Selecionar outro..." se preciso) → CBO pelo código 251510 (Psicólogo clínico) → procedimento +
   quantidade → executante LUCIANO NOCETI E VIEIRA - MATRIZ → sem anexo → resumo.
 - **Conferência humana obrigatória:** o robô NUNCA clica em Autorizar. Para no resumo com uma faixa
   no topo e espera até `CONFERENCIA_MIN` (15) a pessoa clicar. Janela fechada →
