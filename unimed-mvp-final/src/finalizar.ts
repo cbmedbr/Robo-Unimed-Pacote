@@ -151,6 +151,23 @@ export async function finalizarGuia(
   // Garante profissional executante (psicólogo do paciente ou Luciano como default)
   await garantirProfissionalExecutante(page, config, input);
 
+  // ÚLTIMA CONFERÊNCIA, já com o dedo no botão.
+  //
+  // As garantias acima rodavam ANTES de mexer no executante — e mexer no
+  // executante preenche data e troca o psicólogo, que é justamente o tipo de
+  // interação que faz o SGU recarregar o bloco de cima e apagar o médico
+  // solicitante. Ou seja: protegíamos o campo e, logo depois, fazíamos o que
+  // o desprotege.
+  //
+  // O portal então recusava com "O valor do campo Nome do profissional
+  // solicitante é obrigatório" — 24 vezes em 7 dias, o erro mais frequente do
+  // robô, mesmo com a proteção de 25/09 no lugar.
+  //
+  // As duas funções saem na hora quando o campo já está certo, então repetir
+  // aqui custa quase nada e fecha a janela entre a proteção e o clique.
+  await garantirSolicitantePreenchido(page, config, input);
+  await garantirIndicacaoClinicaPreenchida(page, input);
+
   // Clica "Finalizar e Gerar guia"
   logger.info("clicando 'Finalizar e Gerar guia'");
   await page.locator('#Botao_Finalizar, input[name="Botao_Finalizar"], input[value="Finalizar"]')
@@ -172,6 +189,16 @@ export async function finalizarGuia(
   // Mensagens típicas: faixa vermelha no topo do form com texto de erro.
   const conteudoInicial = await page.content();
   const padroesErro: { regex: RegExp; nome: string }[] = [
+    // Falha DO PORTAL, não nossa: o Autorizador da Unimed está fora do ar.
+    // A tela mostra "Erro na comunicação com o servidor de validação" /
+    // "Ocorreu uma exceção na comunicação com o Autorizador". Acontece também
+    // para quem digita a guia à mão, e a própria mensagem manda procurar o
+    // administrador do sistema. Vem PRIMEIRO na lista porque a causa é outra:
+    // não adianta conferir cadastro, nem repetir, até a Unimed normalizar.
+    {
+      regex: /comunica[çc][ãa]o com o (?:servidor de valida[çc][ãa]o|Autorizador)/i,
+      nome: "AUTORIZADOR_INDISPONIVEL",
+    },
     { regex: /N[ãa]o é permitido/i, nome: "não é permitido" },
     { regex: /valor do campo .* (?:é inv|invalid|obrigat)/i, nome: "campo inválido/obrigatório" },
     { regex: /preench(?:a|er) (?:o|os) campo/i, nome: "preencher campo" },
@@ -202,6 +229,17 @@ export async function finalizarGuia(
         logger.info({ dumpPath, screenshotPath }, "dump da tela de erro salvo");
       } catch {
         // ignora
+      }
+
+      // O Autorizador fora do ar não é "portal rejeitou": nada no cadastro
+      // nem no preenchimento muda isso. A mensagem sai com o motivo na frente
+      // para a colaboradora não sair conferindo guia, médico e CID à toa.
+      if (nome === "AUTORIZADOR_INDISPONIVEL") {
+        throw new Error(
+          "AUTORIZADOR_INDISPONIVEL: o Autorizador da Unimed está fora do ar — é falha do portal, " +
+            "não do cadastro nem do robô. A mesma tela aparece para quem digita a guia à mão. " +
+            `A guia NÃO foi salva; repita mais tarde. Mensagem do portal: "${trecho}".`
+        );
       }
 
       throw new Error(`FINALIZACAO_FALHOU: portal rejeitou a finalização. Mensagem: "${trecho}". A guia NÃO foi salva.`);

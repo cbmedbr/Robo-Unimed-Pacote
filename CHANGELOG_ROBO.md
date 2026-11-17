@@ -4,6 +4,53 @@
 
 ---
 
+## 17/11/2026
+
+### Protíamos o campo do médico e, logo depois, fazíamos o que o desprotege
+**Arquivo:** `unimed-mvp-final/src/finalizar.ts`
+
+O erro mais frequente do robô nos últimos dias era o portal recusando com **"O valor do campo
+Nome do profissional solicitante é obrigatório"** — **24 casos em 7 dias**, o mais recente
+hoje às 14:43. Mais 14 casos do nosso próprio aviso "SGU apagou o medico".
+
+A proteção de 25/09 (`garantirSolicitantePreenchido`) estava no lugar e funcionando. O
+problema era *onde* ela rodava:
+
+```
+garantirSolicitantePreenchido()      <- re-preenche o médico
+garantirIndicacaoClinicaPreenchida()
+garantirProfissionalExecutante()     <- preenche data, troca o psicólogo -> SGU recarrega o
+                                        bloco de cima e apaga o médico
+clica "Finalizar e Gerar guia"       <- campo vazio
+```
+
+Mexer no executante é justamente o tipo de interação que dispara o recarregamento que limpa
+`NM_PROFISSIONAL`. Ou seja: a proteção acontecia e, uma linha depois, era desfeita por nós
+mesmos.
+
+As duas garantias passaram a ser repetidas **imediatamente antes do clique**, já com o dedo no
+botão. Ambas saem na hora quando o campo já está certo, então o custo é próximo de zero e a
+janela entre proteger e clicar fecha.
+
+### `AUTORIZADOR_INDISPONIVEL`: a falha que não é nossa
+**Arquivo:** `unimed-mvp-final/src/finalizar.ts`
+
+Uma colaboradora mandou print da tela "Erro na comunicação com o servidor de validação —
+Ocorreu uma exceção na comunicação com o Autorizador. Favor entrar em contato com o
+administrador do sistema."
+
+Isso é o **Autorizador da Unimed fora do ar**: a mesma tela aparece para quem digita a guia à
+mão, e a própria mensagem manda procurar o administrador do portal. Nenhum job no banco
+carregava essa mensagem — o robô não reconhecia o padrão e o classificava como
+`FINALIZACAO_FALHOU` ("portal rejeitou a finalização"), que manda a pessoa conferir cadastro,
+médico e CID à toa.
+
+Agora o padrão é o **primeiro** da lista de erros (a causa é outra, então tem de vencer os
+padrões genéricos) e devolve mensagem própria dizendo que é falha do portal e que a guia
+**não foi salva** — é repetir mais tarde.
+
+---
+
 ## 29/10/2026
 
 ### `isVisible()` não espera — e eu tinha usado como se esperasse

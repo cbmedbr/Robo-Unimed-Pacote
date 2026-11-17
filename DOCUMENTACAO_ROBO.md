@@ -489,6 +489,7 @@ Layout da linha (confirmado em 21/08/2026 contra guias reais):
 | Código | Causa |
 |---|---|
 | `FINALIZACAO_FALHOU` | Portal rejeitou com erro de validação |
+| `AUTORIZADOR_INDISPONIVEL` | **Falha do portal, não nossa.** O SGU mostra "Erro na comunicação com o servidor de validação / Ocorreu uma exceção na comunicação com o Autorizador". Acontece igual para quem digita a guia à mão. Não há o que conferir no cadastro — a guia não foi salva, é repetir quando a Unimed normalizar |
 | `GUIA_NAO_GERADA` | Número da guia não capturado |
 
 ### Execução de Sessão
@@ -607,7 +608,7 @@ para **calcular a quantidade**, só não entram mais no texto.
 
 ## 8. Problemas conhecidos e workarounds
 
-1. **Campo `NM_PROFISSIONAL` limpo pelo portal** — Após clicar "Atualizar procedimento", o SGU limpa o campo do médico solicitante. **Resolvido em 25/09/2026:** o robô re-preenche antes de finalizar (`garantirSolicitantePreenchido`). Antes disso ele apenas logava um warning e clicava em Finalizar mesmo assim, o que fazia o portal recusar — era a causa do `FINALIZACAO_FALHOU`, o erro mais frequente do robô (312 ocorrências entre 25/05 e 02/09).
+1. **Campo `NM_PROFISSIONAL` limpo pelo portal** — Após clicar "Atualizar procedimento", o SGU limpa o campo do médico solicitante. **Resolvido em 25/09/2026:** o robô re-preenche antes de finalizar (`garantirSolicitantePreenchido`). Antes disso ele apenas logava um warning e clicava em Finalizar mesmo assim, o que fazia o portal recusar — era a causa do `FINALIZACAO_FALHOU`, o erro mais frequente do robô (312 ocorrências entre 25/05 e 02/09). **Corrigido de novo em 17/11/2026:** a proteção rodava *antes* de `garantirProfissionalExecutante()`, que preenche data e troca o psicólogo — exatamente a interação que faz o SGU recarregar o bloco de cima e apagar o médico. Protíamos o campo e logo depois fazíamos o que o desprotege; o portal recusava com "O valor do campo Nome do profissional solicitante é obrigatório" **24 vezes em 7 dias**. Agora as garantias são repetidas imediatamente antes do clique em Finalizar.
 
 2. **`isVisible()` não espera** — `locator.isVisible({ timeout: N })` **não** espera N
    milissegundos: checa na hora e devolve `false` se o elemento ainda não renderizou. Medido
