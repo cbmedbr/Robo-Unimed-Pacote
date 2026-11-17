@@ -1,0 +1,40 @@
+ROBO CASACARESC - AUTORIZACAO DE GUIAS SP/SADT
+Portal Benner Conecta (portalconectasaude.com.br)
+==============================================
+
+ATUALIZACAO AUTOMATICA
+  Este robo mora dentro do repositorio Robo-Unimed-Pacote. Qualquer
+  iniciar.bat (o do Unimed na raiz ou o desta pasta) faz git pull da pasta
+  INTEIRA. Ou seja: abriu o robo Unimed, o CASACARESC ja vem atualizado, e
+  vice-versa. Nao precisa copiar nada de PC em PC.
+
+PRIMEIRA VEZ NO PC
+  - O PC precisa ter o repositorio clonado (como o robo Unimed ja tem).
+  - Precisa ter Python (o robo avisa e abre o site se faltar) e o Edge.
+  - Abra robo-casacaresc\iniciar.bat. Ele instala o que falta e pede a
+    senha do portal UMA vez. A senha fica no .env deste PC e nunca vai
+    pro GitHub.
+
+TODA VEZ
+  1. Preencha pacientes.xlsx (uma linha por paciente):
+     paciente | carteirinha | profissional | tipo | dias_semana | quantidade
+     - tipo: TIPICO (50000470) ou TEA (225000286)
+     - dias_semana: seg  ou  seg,qui  -> o robo conta quantas sessoes caem
+       nos proximos 31 dias e pede 4 ou 5
+     - quantidade: opcional; se preenchida, vale ela
+  2. Salve, feche o Excel e abra iniciar.bat. Nao mexa no navegador.
+  3. Resultado em resultados\ (planilha + print de cada guia).
+
+MODO TESTE
+  No .env: MODO_TESTE=sim vai ate o resumo e NAO autoriza.
+  MODO_TESTE=nao autoriza de verdade.
+
+STATUS
+  AUTORIZADO  clicou Autorizar e achou o numero da guia
+  ENVIADO     clicou Autorizar, nao achou o numero: confira o print
+  TESTE_OK    tudo certo ate o resumo (modo teste)
+  CONFERIR    resumo diferente do esperado, NAO autorizou
+  ERRO        travou num passo: veja o print
+
+TROCAR A SENHA NESTE PC
+  Apague o arquivo .env desta pasta e abra o iniciar.bat: ele pede de novo.

@@ -13,3 +13,11 @@ recon-*/
 *-tmp.js
 dist/
 .cache/
+
+# Robo CASACARESC: planilha de pacientes, resultados e login do navegador
+# sao dados de cada PC e contem dados de pacientes. Repositorio PUBLICO.
+robo-casacaresc/pacientes.xlsx
+robo-casacaresc/~$*.xlsx
+robo-casacaresc/resultados/
+robo-casacaresc/perfil_navegador/
+__pycache__/

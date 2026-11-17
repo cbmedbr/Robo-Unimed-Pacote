@@ -67,6 +67,12 @@ DOIS ROBOS:
     Acionado pela aba "Aguardando Execucao" no CRM
     Requer QR Code do paciente (webcam)
 
+OUTROS ROBOS NESTA PASTA:
+  - robo-casacaresc/  Autorizacao de guias SP/SADT da CASACARESC
+    (portal Benner Conecta). Ver robo-casacaresc\LEIA-ME.txt.
+    Qualquer iniciar.bat (deste robo ou de outro) puxa a pasta INTEIRA
+    do GitHub, entao todos os robos se atualizam juntos em todo PC.
+
 PROBLEMAS COMUNS:
   - A janela do iniciar.bat abre e fecha na hora
       1. Abra de novo. Se o robo tinha acabado de se atualizar, a primeira
