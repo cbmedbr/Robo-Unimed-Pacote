@@ -36,7 +36,9 @@ URL_NOVA_GUIA = URL_BASE + "/Guias/SpSadt/NovaGuiaEletiva"
 EMAIL = os.getenv("CASACARESC_EMAIL", os.getenv("EMAIL", "clinica@lucianonoceti.com.br")).strip()
 SENHA = os.getenv("CASACARESC_SENHA", os.getenv("SENHA", "")).strip()
 EXECUTANTE = os.getenv("EXECUTANTE", "LUCIANO NOCETI E VIEIRA - MATRIZ").strip()
-CBO = os.getenv("CBO", "Psicólogo clínico").strip()
+# CBO pelo CODIGO (so digitos). O nome com acento vinha corrompido do .env no
+# Windows (PowerShell le o arquivo como ANSI) e o robo nao achava a opcao.
+CBO_CODIGO = re.sub(r"\D", "", os.getenv("CBO_CODIGO", "251510")) or "251510"
 LENTIDAO_MS = int(os.getenv("LENTIDAO_MS", "150"))
 CONFERENCIA_MIN = int(os.getenv("CONFERENCIA_MIN", "15"))
 HEADLESS = False  # conferencia humana: a janela precisa aparecer sempre
@@ -215,13 +217,16 @@ def passo2_solicitante(page, p):
 
     if not escolhido:
         # abre o "Selecionar outro..." e pesquisa no modal
-        outro = select2_opcoes(page).filter(has_text=re.compile("Selecionar outro", re.I))
-        if not visivel(outro):
-            caixa.click()
+        # O Enter no campo pode ja ter aberto o modal de busca sozinho.
+        if not visivel(page.locator(".modal:visible")):
             outro = select2_opcoes(page).filter(has_text=re.compile("Selecionar outro", re.I))
-        outro.first.click()
+            if not visivel(outro):
+                caixa.click()
+                outro = select2_opcoes(page).filter(has_text=re.compile("Selecionar outro", re.I))
+            outro.first.click()
         modal = page.locator(".modal:visible").last
         modal.wait_for(timeout=15000)
+        # So digitar o nome e apertar Enter (nao precisa da lupa/Pesquisar).
         campo_nome = modal.locator("input[type=text]:visible, input:not([type]):visible").first
         campo_nome.fill(nome)
         campo_nome.press("Enter")
@@ -242,17 +247,24 @@ def passo2_solicitante(page, p):
         melhor.click()
         time.sleep(1.5)
 
-    # CBO
-    cbo = page.locator("select:visible").filter(has=page.locator("option", has_text=re.compile("Psic", re.I))).first
-    cbo.wait_for(timeout=15000)
-    opcoes_cbo = cbo.locator("option")
-    valor = None
-    for i in range(opcoes_cbo.count()):
-        if sem_acento(CBO) in sem_acento(opcoes_cbo.nth(i).inner_text()):
-            valor = opcoes_cbo.nth(i).get_attribute("value")
-            break
+    # CBO: as opcoes chegam depois que o psicologo e escolhido. Espera a
+    # opcao com o codigo aparecer em algum select visivel (ate 20s).
+    cbo, valor = None, None
+    limite = time.time() + 20
+    while time.time() < limite and valor is None:
+        selects = page.locator("select:visible")
+        for i in range(selects.count()):
+            opcoes = selects.nth(i).locator("option")
+            for j in range(opcoes.count()):
+                if CBO_CODIGO in opcoes.nth(j).inner_text():
+                    cbo, valor = selects.nth(i), opcoes.nth(j).get_attribute("value")
+                    break
+            if valor is not None:
+                break
+        if valor is None:
+            time.sleep(0.5)
     if valor is None:
-        raise RuntimeError("Nao achei o CBO de psicologo clinico.")
+        raise RuntimeError(f"Nao achei o CBO {CBO_CODIGO} (psicologo clinico) depois de escolher o psicologo.")
     cbo.select_option(value=valor)
     time.sleep(0.8)
     clicar_proximo(page)
@@ -484,13 +496,21 @@ def main():
                     "screenshot_comprovante_path": comprovante,
                     "duracao_ms": int((time.time() - inicio) * 1000),
                 })
+            except ErroRobo:
+                raise
+            except Exception as e:
+                shot = print_tela(page, p, "erro") if not page.is_closed() else None
+                msg = str(e).splitlines()[0][:400] if str(e) else e.__class__.__name__
+                erro = ErroRobo("ERRO_" + etapa.upper(), f"Falhou na etapa '{etapa}': {msg}")
+                erro.shot = shot
+                raise erro
             finally:
                 try:
                     ctx.close()
                 except Exception:
                     pass
     except ErroRobo as e:
-        shot = print_tela(page, p, "erro") if page is not None and not page.is_closed() else None
+        shot = getattr(e, "shot", None)
         resultado({"sucesso": False, "etapa": etapa, "erro_codigo": e.codigo, "mensagem": e.mensagem,
                    "screenshot_path": shot})
     except Exception as e:
