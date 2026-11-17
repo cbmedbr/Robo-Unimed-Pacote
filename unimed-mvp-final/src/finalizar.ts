@@ -189,12 +189,18 @@ export async function finalizarGuia(
   // Mensagens típicas: faixa vermelha no topo do form com texto de erro.
   const conteudoInicial = await page.content();
   const padroesErro: { regex: RegExp; nome: string }[] = [
-    // Falha DO PORTAL, não nossa: o Autorizador da Unimed está fora do ar.
-    // A tela mostra "Erro na comunicação com o servidor de validação" /
-    // "Ocorreu uma exceção na comunicação com o Autorizador". Acontece também
-    // para quem digita a guia à mão, e a própria mensagem manda procurar o
-    // administrador do sistema. Vem PRIMEIRO na lista porque a causa é outra:
-    // não adianta conferir cadastro, nem repetir, até a Unimed normalizar.
+    // "Erro na comunicação com o servidor de validação / Ocorreu uma exceção na
+    // comunicação com o Autorizador."
+    //
+    // O Autorizador é o serviço que o SGU CHAMA para validar a guia; não é o
+    // portal. Essa tela significa que ESSA chamada estourou — e isso convive
+    // com o portal funcionando normalmente no resto, inclusive para a mesma
+    // pessoa, no mesmo minuto. **Não presuma indisponibilidade geral**: em
+    // 17/11/2026 a colaboradora viu essa tela e o portal estava normal.
+    //
+    // Vem PRIMEIRO na lista porque senão os padrões genéricos abaixo a
+    // capturam e a classificam como "campo obrigatório", mandando conferir
+    // cadastro — que não tem nada a ver.
     {
       regex: /comunica[çc][ãa]o com o (?:servidor de valida[çc][ãa]o|Autorizador)/i,
       nome: "AUTORIZADOR_INDISPONIVEL",
@@ -231,14 +237,19 @@ export async function finalizarGuia(
         // ignora
       }
 
-      // O Autorizador fora do ar não é "portal rejeitou": nada no cadastro
-      // nem no preenchimento muda isso. A mensagem sai com o motivo na frente
-      // para a colaboradora não sair conferindo guia, médico e CID à toa.
+      // Não é "portal rejeitou o preenchimento": a validação externa estourou.
+      // A mensagem diz o que de fato sabemos e NÃO manda esperar — pode ser
+      // específico desta guia, não do portal inteiro. Também não afirma que
+      // nada foi gravado: numa exceção do Autorizador o SGU pode ter deixado a
+      // guia reservada, então o primeiro passo é conferir antes de repetir,
+      // para não duplicar.
       if (nome === "AUTORIZADOR_INDISPONIVEL") {
         throw new Error(
-          "AUTORIZADOR_INDISPONIVEL: o Autorizador da Unimed está fora do ar — é falha do portal, " +
-            "não do cadastro nem do robô. A mesma tela aparece para quem digita a guia à mão. " +
-            `A guia NÃO foi salva; repita mais tarde. Mensagem do portal: "${trecho}".`
+          "AUTORIZADOR_INDISPONIVEL: o SGU não conseguiu falar com o Autorizador (o serviço que " +
+            "valida a guia). Isso não é erro de preenchimento — e pode acontecer só nesta guia, " +
+            "com o portal funcionando normalmente no resto. ANTES de repetir, confira na lista de " +
+            "guias se esta já foi criada, para não gerar duplicada. Se repetir e cair aqui de novo, " +
+            `é caso de abrir chamado na Unimed. Mensagem do portal: "${trecho}".`
         );
       }
 

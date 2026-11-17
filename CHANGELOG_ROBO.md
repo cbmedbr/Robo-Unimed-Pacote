@@ -32,23 +32,29 @@ As duas garantias passaram a ser repetidas **imediatamente antes do clique**, j�
 botão. Ambas saem na hora quando o campo já está certo, então o custo é próximo de zero e a
 janela entre proteger e clicar fecha.
 
-### `AUTORIZADOR_INDISPONIVEL`: a falha que não é nossa
+### `AUTORIZADOR_INDISPONIVEL`: reconhecido, mas sem diagnóstico inventado
 **Arquivo:** `unimed-mvp-final/src/finalizar.ts`
 
 Uma colaboradora mandou print da tela "Erro na comunicação com o servidor de validação —
 Ocorreu uma exceção na comunicação com o Autorizador. Favor entrar em contato com o
 administrador do sistema."
 
-Isso é o **Autorizador da Unimed fora do ar**: a mesma tela aparece para quem digita a guia à
-mão, e a própria mensagem manda procurar o administrador do portal. Nenhum job no banco
-carregava essa mensagem — o robô não reconhecia o padrão e o classificava como
-`FINALIZACAO_FALHOU` ("portal rejeitou a finalização"), que manda a pessoa conferir cadastro,
-médico e CID à toa.
+**O que é certo:** o Autorizador é o serviço externo que o SGU *chama* para validar a guia.
+Essa tela diz que a chamada estourou — não é erro de preenchimento nosso. O robô não
+reconhecia o padrão: caía nos padrões genéricos e virava `FINALIZACAO_FALHOU` ("portal
+rejeitou a finalização"), que manda a pessoa conferir cadastro, médico e CID à toa. Agora o
+padrão é o **primeiro** da lista, justamente para vencer os genéricos.
 
-Agora o padrão é o **primeiro** da lista de erros (a causa é outra, então tem de vencer os
-padrões genéricos) e devolve mensagem própria dizendo que é falha do portal e que a guia
-**não foi salva** — é repetir mais tarde.
+**O que eu afirmei errado, e corrijo aqui:** escrevi que era "o Autorizador da Unimed fora do
+ar" e que bastava repetir mais tarde. A colaboradora conferiu e **o portal estava funcionando
+normalmente**. As duas coisas não se contradizem — uma chamada de validação pode estourar para
+uma guia com o resto do portal de pé —, mas eu tinha exatamente uma evidência (o print) e
+nenhum job no banco com essa mensagem. Era diagnóstico inventado.
 
+A mensagem do robô passou a dizer só o que se sabe: a validação externa falhou, não é
+preenchimento, pode ser específico desta guia. E **não** manda esperar: manda conferir se a
+guia já foi criada antes de repetir (numa exceção do Autorizador o SGU pode deixar a guia
+reservada, e repetir às cegas duplica), e abrir chamado se repetir igual.
 ---
 
 ## 29/10/2026

@@ -489,7 +489,7 @@ Layout da linha (confirmado em 21/08/2026 contra guias reais):
 | Código | Causa |
 |---|---|
 | `FINALIZACAO_FALHOU` | Portal rejeitou com erro de validação |
-| `AUTORIZADOR_INDISPONIVEL` | **Falha do portal, não nossa.** O SGU mostra "Erro na comunicação com o servidor de validação / Ocorreu uma exceção na comunicação com o Autorizador". Acontece igual para quem digita a guia à mão. Não há o que conferir no cadastro — a guia não foi salva, é repetir quando a Unimed normalizar |
+| `AUTORIZADOR_INDISPONIVEL` | O SGU não conseguiu falar com o **Autorizador** — o serviço externo que ele chama para validar a guia. Não é erro de preenchimento, e **não significa portal fora do ar**: em 17/11/2026 a colaboradora viu essa tela com o portal normal. Pode ser específico de uma guia. Conferir se a guia já foi criada antes de repetir (risco de duplicar); se repetir e cair igual, é chamado na Unimed |
 | `GUIA_NAO_GERADA` | Número da guia não capturado |
 
 ### Execução de Sessão
