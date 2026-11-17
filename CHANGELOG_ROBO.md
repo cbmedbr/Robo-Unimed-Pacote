@@ -4,6 +4,23 @@
 
 ---
 
+## 17/11/2026 (noite, 3)
+
+### Casacaresc ligado ao CRM: o robô só recebe dados do CRM
+**Arquivos:** `robo-casacaresc/*`, `servidor-local/src/{operadora,config,executor,casacaresc-job}.ts`,
+`iniciar-servidor.bat`, `DOCUMENTACAO_ROBO.md`, `.gitignore`
+
+Pedido da operação: nada de planilha, os dados entram só pelo CRM. O servidor reconhece o plano
+Casacaresc e dispara o robô Python; o robô preenche, para no resumo e espera uma pessoa clicar em
+Autorizar; o resultado volta pro CRM pelo mesmo caminho da Unimed/SC Saúde.
+
+Corrige também um risco: um job de plano Casacaresc caía no default `unimed` e ia pro portal errado.
+Vale em todo PC que abrir o `iniciar.bat` (sem flag de habilitação, decisão do responsável). A senha
+do portal é pedida uma vez por PC pelo `robo-casacaresc/preparar.bat`. Detalhes na seção 10 da
+DOCUMENTACAO_ROBO.md.
+
+---
+
 ## 17/11/2026 (noite, 2)
 
 ### CASACARESC: robo nao clica mais em Autorizar

@@ -3,46 +3,55 @@
 Robo de autorizacao de guias SP/SADT - CASACARESC (portal Benner Conecta)
 Clinica Luciano Noceti
 
-Le a planilha pacientes.xlsx, pede a autorizacao de cada paciente no portal
-e grava o resultado em resultados/.
+So recebe dados do CRM. Quem chama e o servidor-local (mesmo servidor do robo
+Unimed), com:   python robo.py --input pedido.json
+
+O robo preenche a guia e PARA no resumo. Quem clica em Autorizar e uma pessoa
+(conferencia humana obrigatoria). Depois do clique o robo le o resultado e
+devolve para o servidor, que grava no CRM.
+
+Saida: a ultima coisa impressa e "=== RESULTADO ===" seguida de um JSON, no
+mesmo contrato do robo Unimed/SC Saude (ver servidor-local/src/executor.ts).
 """
+import argparse
+import json
 import os
 import re
 import sys
 import time
 import unicodedata
-from datetime import date, datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
-from openpyxl import Workbook, load_workbook
 from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
 PASTA = Path(__file__).resolve().parent
-load_dotenv(PASTA / ".env")
+# variaveis que o servidor passa no ambiente tem prioridade sobre o .env
+load_dotenv(PASTA / ".env", override=False)
 
 URL_BASE = "https://portalconectasaude.com.br"
-URL_LOGIN = URL_BASE + "/Account/Login"
 URL_NOVA_GUIA = URL_BASE + "/Guias/SpSadt/NovaGuiaEletiva"
 
-EMAIL = os.getenv("EMAIL", "").strip()
-SENHA = os.getenv("SENHA", "").strip()
-CODIGO_TIPICO = os.getenv("CODIGO_TIPICO", "50000470").strip()
-CODIGO_TEA = os.getenv("CODIGO_TEA", "225000286").strip()
+EMAIL = os.getenv("CASACARESC_EMAIL", os.getenv("EMAIL", "clinica@lucianonoceti.com.br")).strip()
+SENHA = os.getenv("CASACARESC_SENHA", os.getenv("SENHA", "")).strip()
 EXECUTANTE = os.getenv("EXECUTANTE", "LUCIANO NOCETI E VIEIRA - MATRIZ").strip()
 CBO = os.getenv("CBO", "Psicólogo clínico").strip()
-DIAS_JANELA = int(os.getenv("DIAS_JANELA", "31"))
 LENTIDAO_MS = int(os.getenv("LENTIDAO_MS", "150"))
+CONFERENCIA_MIN = int(os.getenv("CONFERENCIA_MIN", "15"))
+HEADLESS = False  # conferencia humana: a janela precisa aparecer sempre
 
-PLANILHA = PASTA / "pacientes.xlsx"
-PASTA_RESULT = PASTA / "resultados"
-PASTA_PRINTS = PASTA_RESULT / "prints"
+PASTA_PRINTS = PASTA / "resultados" / "prints"
 PERFIL = PASTA / "perfil_navegador"
 
-DIAS = {"seg": 0, "ter": 1, "qua": 2, "qui": 3, "sex": 4, "sab": 5, "dom": 6}
+
+class ErroRobo(Exception):
+    def __init__(self, codigo, mensagem):
+        super().__init__(mensagem)
+        self.codigo = codigo
+        self.mensagem = mensagem
 
 
-# ------------------------------------------------------------------ utilidades
 def log(msg):
     print(f"[{datetime.now():%H:%M:%S}] {msg}", flush=True)
 
@@ -52,59 +61,26 @@ def sem_acento(txt):
     return "".join(c for c in txt if not unicodedata.combining(c)).lower().strip()
 
 
-def calcular_quantidade(dias_semana_txt, inicio=None):
-    """Conta quantos atendimentos caem nos proximos DIAS_JANELA dias (comecando hoje)."""
-    inicio = inicio or date.today()
-    dias = []
-    for parte in re.split(r"[,;/]+|\s+e\s+|\s+", sem_acento(dias_semana_txt)):
-        parte = parte.strip()[:3]
-        if parte in DIAS:
-            dias.append(DIAS[parte])
-    if not dias:
-        raise ValueError(f"dia da semana invalido: '{dias_semana_txt}' (use seg, ter, qua, qui, sex, sab)")
-    total = 0
-    for i in range(DIAS_JANELA):
-        if (inicio + timedelta(days=i)).weekday() in dias:
-            total += 1
-    return total
-
-
-def ler_planilha():
-    if not PLANILHA.exists():
-        sys.exit(f"Nao achei a planilha {PLANILHA.name} na pasta do robo.")
-    ws = load_workbook(PLANILHA, data_only=True).active
-    linhas = list(ws.iter_rows(values_only=True))
-    cab = [sem_acento(c or "") for c in linhas[0]]
-
-    def col(nome):
-        return cab.index(nome) if nome in cab else None
-
-    ic, ip, it, idias, iq, inome = (col("carteirinha"), col("profissional"), col("tipo"),
-                                     col("dias_semana"), col("quantidade"), col("paciente"))
-    if ic is None or ip is None:
-        sys.exit("A planilha precisa ter as colunas 'carteirinha' e 'profissional'.")
-    pacientes = []
-    for n, l in enumerate(linhas[1:], start=2):
-        if not l or l[ic] in (None, ""):
-            continue
-        cart = re.sub(r"\D", "", str(l[ic]).split(".")[0] if isinstance(l[ic], float) else str(l[ic]))
-        tipo = sem_acento(l[it]) if it is not None and l[it] else "tipico"
-        codigo = CODIGO_TEA if tipo.startswith("tea") else CODIGO_TIPICO
-        qtd = None
-        if iq is not None and l[iq] not in (None, ""):
-            qtd = int(float(l[iq]))
-        elif idias is not None and l[idias]:
-            qtd = calcular_quantidade(l[idias])
-        pacientes.append({
-            "linha": n,
-            "paciente": (l[inome] if inome is not None else "") or "",
-            "carteirinha": cart,
-            "profissional": str(l[ip]).strip(),
-            "tipo": "TEA" if tipo.startswith("tea") else "TIPICO",
-            "codigo": codigo,
-            "quantidade": qtd,
-        })
-    return pacientes
+def ler_pedido(caminho):
+    with open(caminho, encoding="utf-8") as f:
+        d = json.load(f)
+    p = {
+        "job_id": d.get("job_id", ""),
+        "paciente": (d.get("paciente") or {}).get("nome", ""),
+        "carteirinha": re.sub(r"\D", "", str((d.get("paciente") or {}).get("carteirinha", ""))),
+        "profissional": str((d.get("profissional") or {}).get("nome", "")).strip(),
+        "codigo": str((d.get("procedimento") or {}).get("codigo", "")).strip(),
+        "quantidade": int((d.get("procedimento") or {}).get("quantidade") or 0),
+    }
+    if not p["carteirinha"]:
+        raise ErroRobo("CARTEIRINHA_AUSENTE", f"Paciente {p['paciente']} sem carteirinha no CRM.")
+    if not p["profissional"]:
+        raise ErroRobo("PSICOLOGO_AUSENTE", "Pedido sem psicologo. O solicitante na Casacaresc e o psicologo.")
+    if not p["codigo"]:
+        raise ErroRobo("PROCEDIMENTO_AUSENTE", "Pedido sem codigo de procedimento.")
+    if p["quantidade"] < 1:
+        raise ErroRobo("QUANTIDADE_INVALIDA", "Quantidade de sessoes zerada no pedido.")
+    return p
 
 
 # ------------------------------------------------------------------ navegador
@@ -177,7 +153,7 @@ def fazer_login(page):
         log("Ja estava logado.")
         return
     if not EMAIL or not SENHA:
-        sys.exit("Preencha EMAIL e SENHA no arquivo .env antes de rodar.")
+        raise ErroRobo("CONFIG_AUSENTE", "Senha do portal Casacaresc nao configurada neste PC. Feche o robo e abra o iniciar.bat de novo: ele pede a senha.")
     log("Fazendo login...")
     page.locator("input[type=email], input[name*='mail' i], input[id*='mail' i]").first.fill(EMAIL)
     page.locator("input[type=password]").first.fill(SENHA)
@@ -190,9 +166,8 @@ def fazer_login(page):
     try:
         page.wait_for_url(lambda u: "/Account/Login" not in u, timeout=60000)
     except PWTimeout:
-        print("\n*** O login nao passou sozinho. Se apareceu codigo de 2 fatores ou captcha, "
-              "resolva na janela do navegador e aperte ENTER aqui. ***")
-        input()
+        log("Login nao passou sozinho (2 fatores ou captcha?). Esperando ate 5 min resolverem na janela...")
+        page.wait_for_url(lambda u: "/Account/Login" not in u, timeout=300000)
     log("Login ok.")
 
 
@@ -367,100 +342,167 @@ def conferir_resumo(page, p):
     return problemas
 
 
-def aguardar_conferencia_humana(page, p):
-    """O robo NAO clica em Autorizar. Para no resumo e espera a pessoa conferir e clicar."""
-    print()
-    print("=" * 64)
-    print(f"  CONFIRA A GUIA NO NAVEGADOR: {p['paciente'] or p['carteirinha']}")
-    print(f"  {p['profissional']} | {p['tipo']} {p['codigo']} | {p['quantidade']} sessoes")
-    print("  Se estiver tudo certo, clique em AUTORIZAR no portal.")
-    print("  Depois volte aqui e aperte ENTER para ir ao proximo paciente.")
-    print("  (Se NAO quiser autorizar esta, digite P e ENTER para pular.)")
-    print("=" * 64)
-    resp = input("> ").strip().lower()
-    if resp.startswith("p"):
-        return "PULADO", "", "Pessoa decidiu nao autorizar na conferencia."
-    time.sleep(1)
-    texto = page.locator("body").inner_text()
-    m = re.search(r"(?:guia|n[uú]mero|senha)[^\d]{0,40}(\d{5,})", texto, re.I)
-    numero = m.group(1) if m else ""
-    return ("AUTORIZADO" if numero else "CONFERIDO"), numero, re.sub(r"\s+", " ", texto)[:300]
-
-
-# ------------------------------------------------------------------ principal
-def print_tela(page, p, sufixo):
-    PASTA_PRINTS.mkdir(parents=True, exist_ok=True)
-    arq = PASTA_PRINTS / f"{datetime.now():%Y%m%d_%H%M%S}_{p['carteirinha']}_{sufixo}.png"
+def banner(page, texto, cor="#0f766e"):
+    """Faixa fixa no topo do portal avisando a pessoa o que fazer."""
     try:
-        page.screenshot(path=str(arq), full_page=True)
+        page.evaluate(
+            """([t, c]) => {
+                let el = document.getElementById('robo-cln-aviso');
+                if (!el) { el = document.createElement('div'); el.id = 'robo-cln-aviso'; document.body.appendChild(el); }
+                el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2147483647;padding:14px 20px;' +
+                  'font:bold 17px Arial;color:#fff;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.3);background:' + c;
+                el.textContent = t;
+            }""",
+            [texto, cor],
+        )
     except Exception:
         pass
-    return arq.name
 
 
-def processar(page, p):
-    passo1_beneficiario(page, p)
-    passo2_solicitante(page, p)
-    passo3_procedimento(page, p)
-    passo4_executante(page, p)
-    passo5_anexos(page, p)
-    problemas = conferir_resumo(page, p)
+def ainda_no_resumo(page):
+    btn = page.locator("button:visible, a:visible, input[type=submit]:visible") \
+              .filter(has_text=re.compile(r"^\s*Autorizar\s*$", re.I))
+    try:
+        return btn.count() > 0 and "NovaGuia" in page.url
+    except Exception:
+        return False
+
+
+def ler_desfecho(page):
+    texto = page.locator("body").inner_text()
+    t = sem_acento(texto)
+    m = re.search(r"(?:n[uú]mero\s+da\s+guia|guia\s+(?:n[º°o.]*|numero)?|senha)[^\d]{0,40}(\d{5,})", texto, re.I)
+    numero = m.group(1) if m else ""
+    if not numero:
+        m2 = re.search(r"[?&]id=(\d{5,})", page.url)
+        numero = m2.group(1) if m2 else ""
+    if re.search(r"\b(negad[ao]|indeferid[ao])\b", t):
+        situacao = "NEGADA"
+    elif re.search(r"em (analise|auditoria|estudo)|aguardando (analise|auditoria)", t):
+        situacao = "EM_ANALISE"
+    else:
+        situacao = "APROVADO"
+    return numero, situacao, re.sub(r"\s+", " ", texto)[:400]
+
+
+def aguardar_conferencia_humana(page, p, problemas):
+    aviso = (f"ROBO: confira a guia de {p['paciente'] or p['carteirinha']} "
+             f"({p['quantidade']} sessoes) e clique em AUTORIZAR. Se estiver errada, feche esta janela.")
     if problemas:
-        print_tela(page, p, "divergencia")
-        print("\n  !!! ATENCAO: o robo achou diferenca no resumo: " + "; ".join(problemas))
-        print("  !!! Corrija na tela antes de autorizar, ou pule este paciente.")
-    status, numero, msg = aguardar_conferencia_humana(page, p)
-    if problemas:
-        msg = "Divergencia apontada pelo robo: " + "; ".join(problemas) + " | " + msg
-    return status, numero, msg, print_tela(page, p, "depois_conferencia")
+        banner(page, "ATENCAO, o robo achou diferenca: " + "; ".join(problemas) +
+               ". Corrija antes de autorizar ou feche a janela.", "#b91c1c")
+    else:
+        banner(page, aviso)
+    log("Guia preenchida. Esperando uma pessoa conferir e clicar em Autorizar...")
+
+    limite = time.time() + CONFERENCIA_MIN * 60
+    while time.time() < limite:
+        try:
+            if page.is_closed():
+                raise ErroRobo("CONFERENCIA_CANCELADA", "A janela foi fechada sem autorizar. Nenhuma guia foi emitida.")
+            if not ainda_no_resumo(page):
+                try:
+                    page.wait_for_load_state("networkidle", timeout=20000)
+                except PWTimeout:
+                    pass
+                time.sleep(2)
+                if ainda_no_resumo(page):
+                    continue  # portal so mostrou um aviso; segue esperando
+                return ler_desfecho(page)
+            time.sleep(2)
+        except ErroRobo:
+            raise
+        except Exception as e:
+            if "closed" in str(e).lower() or "target" in str(e).lower():
+                raise ErroRobo("CONFERENCIA_CANCELADA", "A janela foi fechada sem autorizar. Nenhuma guia foi emitida.")
+            time.sleep(2)
+    raise ErroRobo("CONFERENCIA_NAO_CONCLUIDA",
+                   f"Ninguem clicou em Autorizar em {CONFERENCIA_MIN} minutos. Nenhuma guia foi emitida, pode pedir de novo.")
+
+
+def print_tela(page, p, sufixo):
+    PASTA_PRINTS.mkdir(parents=True, exist_ok=True)
+    arq = PASTA_PRINTS / f"{datetime.now():%Y%m%d_%H%M%S}_{p.get('job_id') or p.get('carteirinha')}_{sufixo}.png"
+    try:
+        page.screenshot(path=str(arq), full_page=True)
+        return str(arq)
+    except Exception:
+        return None
+
+
+def resultado(dados):
+    print("\n=== RESULTADO ===")
+    print(json.dumps(dados, ensure_ascii=False, indent=2), flush=True)
 
 
 def main():
-    pacientes = ler_planilha()
-    if not pacientes:
-        sys.exit("A planilha esta vazia.")
-    sem_qtd = [p for p in pacientes if not p["quantidade"]]
-    if sem_qtd:
-        sys.exit("Linhas sem quantidade e sem dias_semana: " + ", ".join(str(p["linha"]) for p in sem_qtd))
-
-    log(f"{len(pacientes)} paciente(s) na planilha. O robo preenche e PARA no resumo; quem clica em Autorizar e voce.")
-    PASTA_RESULT.mkdir(exist_ok=True)
-
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "resultado"
-    ws.append(["linha", "paciente", "carteirinha", "profissional", "tipo", "codigo", "quantidade",
-               "status", "numero_guia", "mensagem", "print", "horario"])
-    arq_result = PASTA_RESULT / f"resultado_{datetime.now():%Y%m%d_%H%M}.xlsx"
-
-    with sync_playwright() as pw:
-        try:
-            ctx = pw.chromium.launch_persistent_context(str(PERFIL), channel="msedge", headless=False,
-                                                        slow_mo=LENTIDAO_MS, viewport={"width": 1366, "height": 850})
-        except Exception:
-            ctx = pw.chromium.launch_persistent_context(str(PERFIL), channel="chrome", headless=False,
-                                                        slow_mo=LENTIDAO_MS, viewport={"width": 1366, "height": 850})
-        page = ctx.pages[0] if ctx.pages else ctx.new_page()
-        page.set_default_timeout(30000)
-        page.on("dialog", lambda d: (log(f"Aviso do portal: {d.message}"), d.accept()))
-
-        fazer_login(page)
-
-        for i, p in enumerate(pacientes, 1):
-            log(f"({i}/{len(pacientes)}) {p['paciente'] or p['carteirinha']} | {p['profissional']} | "
-                f"{p['tipo']} {p['codigo']} x{p['quantidade']}")
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--input", required=True)
+    args = ap.parse_args()
+    inicio = time.time()
+    etapa = "leitura_pedido"
+    p = {}
+    page = None
+    ctx = None
+    try:
+        p = ler_pedido(args.input)
+        log(f"Pedido {p['job_id']}: {p['paciente']} | {p['profissional']} | {p['codigo']} x{p['quantidade']}")
+        with sync_playwright() as pw:
+            etapa = "abrir_navegador"
             try:
-                status, numero, msg, prt = processar(page, p)
-            except Exception as e:
-                status, numero, msg, prt = "ERRO", "", str(e).splitlines()[0][:300], print_tela(page, p, "erro")
-            log(f"   -> {status} {numero} {msg[:120]}")
-            ws.append([p["linha"], p["paciente"], p["carteirinha"], p["profissional"], p["tipo"], p["codigo"],
-                       p["quantidade"], status, numero, msg, prt, f"{datetime.now():%d/%m/%Y %H:%M}"])
-            wb.save(arq_result)
-
-        ctx.close()
-
-    log(f"Fim. Resultado salvo em: {arq_result}")
+                ctx = pw.chromium.launch_persistent_context(str(PERFIL), channel="msedge", headless=HEADLESS,
+                                                            slow_mo=LENTIDAO_MS, viewport={"width": 1366, "height": 850})
+            except Exception:
+                ctx = pw.chromium.launch_persistent_context(str(PERFIL), channel="chrome", headless=HEADLESS,
+                                                            slow_mo=LENTIDAO_MS, viewport={"width": 1366, "height": 850})
+            page = ctx.pages[0] if ctx.pages else ctx.new_page()
+            page.set_default_timeout(30000)
+            page.on("dialog", lambda d: (log(f"Aviso do portal: {d.message}"), d.accept()))
+            try:
+                etapa = "login"; fazer_login(page)
+                etapa = "beneficiario"; passo1_beneficiario(page, p)
+                etapa = "solicitante"; passo2_solicitante(page, p)
+                etapa = "procedimento"; passo3_procedimento(page, p)
+                etapa = "executante"; passo4_executante(page, p)
+                etapa = "anexos"; passo5_anexos(page, p)
+                etapa = "resumo"; problemas = conferir_resumo(page, p)
+                etapa = "conferencia_humana"
+                numero, situacao, texto = aguardar_conferencia_humana(page, p, problemas)
+                comprovante = print_tela(page, p, "comprovante")
+                obs = None
+                if not numero:
+                    obs = "Robo nao achou o numero da guia na tela depois do Autorizar. Confira o comprovante e preencha o numero."
+                if problemas:
+                    obs = ((obs + " ") if obs else "") + "Robo apontou diferenca no resumo antes do Autorizar: " + "; ".join(problemas)
+                resultado({
+                    "sucesso": True,
+                    "numero_guia": numero or None,
+                    "situacao": situacao,
+                    "observacao": obs,
+                    "quantidade_solicitada": p["quantidade"],
+                    "quantidade_autorizada": None,
+                    "screenshot_comprovante_path": comprovante,
+                    "duracao_ms": int((time.time() - inicio) * 1000),
+                })
+            finally:
+                try:
+                    ctx.close()
+                except Exception:
+                    pass
+    except ErroRobo as e:
+        shot = print_tela(page, p, "erro") if page is not None and not page.is_closed() else None
+        resultado({"sucesso": False, "etapa": etapa, "erro_codigo": e.codigo, "mensagem": e.mensagem,
+                   "screenshot_path": shot})
+    except Exception as e:
+        shot = None
+        try:
+            if page is not None and not page.is_closed():
+                shot = print_tela(page, p, "erro")
+        except Exception:
+            pass
+        msg = str(e).splitlines()[0][:400] if str(e) else e.__class__.__name__
+        resultado({"sucesso": False, "etapa": etapa, "erro_codigo": "ERRO_" + etapa.upper(),
+                   "mensagem": f"Falhou na etapa '{etapa}': {msg}", "screenshot_path": shot})
 
 
 if __name__ == "__main__":

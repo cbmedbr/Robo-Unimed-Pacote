@@ -45,6 +45,9 @@ export const config = {
   // guia preenchida na frente da pessoa. 25 minutos cobre a espera de 15 do
   // robô mais o tempo de preencher.
   scsaudeTimeoutMs: parseInt(opcional("SCSAUDE_TIMEOUT_MS", "1500000"), 10),
+  // Casacaresc: mesmo motivo do SC Saúde, o robô espera a pessoa conferir
+  // (15 min no robô) antes de autorizar. 25 min cobre a espera + preencher.
+  casacarescTimeoutMs: parseInt(opcional("CASACARESC_TIMEOUT_MS", "1500000"), 10),
   roboHeadless: opcional("ROBO_HEADLESS", "false") === "true",
   port: parseInt(opcional("PORT", "9876"), 10),
   corsOrigins: opcional("CORS_ORIGINS", "*").split(",").map((s) => s.trim()),

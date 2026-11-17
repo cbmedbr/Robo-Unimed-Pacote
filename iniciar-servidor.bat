@@ -96,6 +96,9 @@ if errorlevel 1 (
 )
 
 :iniciar
+rem Robo Casacaresc: prepara Python, dependencias e senha. Nunca bloqueia o servidor.
+if exist "%RAIZ%robo-casacaresc\preparar.bat" call "%RAIZ%robo-casacaresc\preparar.bat"
+
 echo.
 echo Iniciando servidor do Robo Unimed...
 cd /d "%RAIZ%servidor-local"

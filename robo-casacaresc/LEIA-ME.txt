@@ -2,41 +2,25 @@ ROBO CASACARESC - AUTORIZACAO DE GUIAS SP/SADT
 Portal Benner Conecta (portalconectasaude.com.br)
 ==============================================
 
-ATUALIZACAO AUTOMATICA
-  Este robo mora dentro do repositorio Robo-Unimed-Pacote. Qualquer
-  iniciar.bat (o do Unimed na raiz ou o desta pasta) faz git pull da pasta
-  INTEIRA. Ou seja: abriu o robo Unimed, o CASACARESC ja vem atualizado, e
-  vice-versa. Nao precisa copiar nada de PC em PC.
+COMO FUNCIONA
+  O robo so recebe dados do CRM. Nao existe planilha nem botao aqui.
+  1. No CRM, aba Guias Casacaresc, clique em "Autorizar guia".
+  2. O servidor do robo (o mesmo iniciar.bat do robo Unimed) abre o Edge
+     e preenche a guia inteira no portal.
+  3. O robo PARA no resumo e mostra uma faixa no topo da tela.
+     Ele NUNCA clica em Autorizar sozinho.
+       - Confira. Se estiver certo, clique em AUTORIZAR no portal.
+       - Se estiver errado, feche a janela: nada e emitido.
+     Faixa vermelha = o robo achou diferenca no resumo. Corrija ou feche.
+  4. O robo le o numero da guia e devolve para o CRM, com print.
+  Se ninguem clicar em 15 minutos, ele desiste e avisa no CRM.
 
-PRIMEIRA VEZ NO PC
-  - O PC precisa ter o repositorio clonado (como o robo Unimed ja tem).
-  - Precisa ter Python (o robo avisa e abre o site se faltar) e o Edge.
-  - Abra robo-casacaresc\iniciar.bat. Ele instala o que falta e pede a
-    senha do portal UMA vez. A senha fica no .env deste PC e nunca vai
-    pro GitHub.
-
-TODA VEZ
-  1. Preencha pacientes.xlsx (uma linha por paciente):
-     paciente | carteirinha | profissional | tipo | dias_semana | quantidade
-     - tipo: TIPICO (50000470) ou TEA (225000286)
-     - dias_semana: seg  ou  seg,qui  -> o robo conta quantas sessoes caem
-       nos proximos 31 dias e pede 4 ou 5
-     - quantidade: opcional; se preenchida, vale ela
-  2. Salve, feche o Excel e abra iniciar.bat.
-  3. O robo preenche a guia inteira e PARA no resumo. Ele NUNCA clica em
-     Autorizar sozinho. Para cada paciente:
-       - confira a guia no navegador
-       - se estiver certa, clique em AUTORIZAR no portal
-       - volte na janela preta e aperte ENTER: ele vai pro proximo
-       - se nao quiser autorizar, digite P e ENTER para pular
-     Se o robo achar alguma diferenca no resumo, ele avisa na janela preta.
-  4. Resultado em resultados\ (planilha + print de cada guia).
-
-STATUS
-  AUTORIZADO  voce autorizou e o robo achou o numero da guia
-  CONFERIDO   voce deu ENTER mas o robo nao achou o numero: confira o print
-  PULADO      voce digitou P, guia nao autorizada
-  ERRO        travou num passo: veja o print
+INSTALACAO
+  Nao tem nada separado. Ao abrir o iniciar.bat da raiz:
+  - instala o que falta para este robo
+  - pede a senha do portal Casacaresc uma vez por PC
+  Precisa de Python (https://www.python.org/downloads/, marcar
+  "Add Python to PATH") e do Microsoft Edge.
 
 TROCAR A SENHA NESTE PC
   Apague o arquivo .env desta pasta e abra o iniciar.bat: ele pede de novo.

@@ -6,7 +6,7 @@ import type { UnimedJob } from "./types.js";
  * A decisão sai do **plano do paciente**, não de uma escolha de quem opera: a
  * colaboradora abre o mesmo robô de sempre e não seleciona portal nenhum.
  */
-export type Operadora = "unimed" | "scsaude";
+export type Operadora = "unimed" | "scsaude" | "casacaresc";
 
 /**
  * Subcomando do robô por operadora. É o que `index.ts` do robô espera.
@@ -18,6 +18,10 @@ export type Operadora = "unimed" | "scsaude";
 export const COMANDO_POR_OPERADORA: Record<Operadora, string> = {
   unimed: "autorizar",
   scsaude: "scsaude",
+  // O Casacaresc é outro robô (Python, pasta robo-casacaresc/) e não usa
+  // subcomando: o executor chama `robo.py --input` direto. Fica aqui só para o
+  // tipo fechar e para o log dizer qual portal foi usado.
+  casacaresc: "casacaresc",
 };
 
 /**
@@ -34,6 +38,9 @@ export function operadoraDoJob(job: Pick<UnimedJob, "plano_saude_nome_snapshot">
   const plano = normalizar(job.plano_saude_nome_snapshot);
   if (!plano) return "unimed";
   if (/\bsc\s*saude\b/.test(plano)) return "scsaude";
+  // Antes desta linha um paciente Casacaresc caía no default e ia pro portal
+  // da Unimed.
+  if (/\bcasa\s*caresc\b/.test(plano)) return "casacaresc";
   return "unimed";
 }
 
