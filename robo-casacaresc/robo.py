@@ -695,8 +695,9 @@ def modo_verificar(caminho):
     with sync_playwright() as pw:
         # Perfil proprio: a checagem pode cair no meio de uma autorizacao, e dois
         # navegadores nao abrem o mesmo perfil ao mesmo tempo.
-        ctx, page = abrir_navegador(pw, PASTA / "perfil_verificacao")
+        ctx = None
         try:
+            ctx, page = abrir_navegador(pw, PASTA / "perfil_verificacao")
             fazer_login(page)
             for g in guias:
                 num = str(g.get("numero_prestador") or "")
@@ -721,7 +722,8 @@ def modo_verificar(caminho):
                                   "numero_operadora": None})
         finally:
             try:
-                ctx.close()
+                if ctx:
+                    ctx.close()
             except Exception:
                 pass
     resultado({"resultados": saida})
