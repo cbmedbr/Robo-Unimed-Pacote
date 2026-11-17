@@ -1,33 +1,26 @@
 @echo off
 rem Chamado pelo iniciar-servidor.bat da raiz, a cada inicio.
-rem Prepara o plano Casacaresc neste PC (Python, dependencias, senha).
-rem NUNCA impede o servidor de subir: se algo faltar, so avisa. O robo Unimed
-rem e o SC Saude continuam funcionando normalmente.
-setlocal EnableDelayedExpansion
+rem Prepara o plano Casacaresc neste PC: Python, dependencias e senha.
+rem NUNCA impede o servidor de subir: se algo faltar, so avisa. Unimed e
+rem SC Saude continuam funcionando normalmente.
+setlocal
 cd /d "%~dp0"
 
+rem ---- Python ----------------------------------------------------------
+rem Cada candidato e TESTADO de verdade. "where python" acha o atalho da
+rem Microsoft Store (WindowsApps), que existe mas nao roda nada; e "py" pode
+rem existir sem Python instalado. Foi o PYTHON_AUSENTE de 17/11/2026.
 set "PY="
-where py >nul 2>&1 && set "PY=py -3"
-if not defined PY (
-    where python >nul 2>&1 && set "PY=python"
-)
-rem Python instalado so para o usuario nem sempre esta no PATH desta janela.
+call :testar py -3
+if not defined PY call :testar python
 if not defined PY call :achar_python
-if not defined PY (
-    where winget >nul 2>&1
-    if not errorlevel 1 (
-        echo.
-        echo Instalando o Python para o plano Casacaresc. Uma vez so neste PC,
-        echo pode levar alguns minutos. Nao feche a janela.
-        winget install -e --id Python.Python.3.12 --scope user --silent --accept-package-agreements --accept-source-agreements >nul 2>&1
-        call :achar_python
-    )
-)
+if not defined PY call :instalar_python
 if not defined PY (
     echo.
     echo AVISO: nao consegui instalar o Python neste PC. O plano Casacaresc nao vai
-    echo funcionar aqui ate instalar ^(https://www.python.org/downloads/ , marcar
-    echo "Add Python to PATH"^). Unimed e SC Saude seguem normais.
+    echo funcionar aqui. Instale pelo site https://www.python.org/downloads/
+    echo marcando "Add Python to PATH" e abra o iniciar.bat de novo.
+    echo Unimed e SC Saude seguem normais.
     exit /b 0
 )
 
@@ -57,13 +50,32 @@ if errorlevel 1 (
 )
 exit /b 0
 
+rem ---- sub-rotinas -------------------------------------------------------
+:testar
+%* -c "import sys" >nul 2>&1
+if not errorlevel 1 set "PY=%*"
+exit /b 0
+
 :achar_python
-for /d %%D in ("%LOCALAPPDATA%\Programs\Python\Python3*") do (
-    if exist "%%D\python.exe" set "PY="%%D\python.exe""
+for /d %%D in ("%LOCALAPPDATA%\Programs\Python\Python3*" "%ProgramFiles%\Python3*") do (
+    if not defined PY if exist "%%~D\python.exe" call :testar "%%~D\python.exe"
 )
-if not defined PY (
-    for /d %%D in ("%ProgramFiles%\Python3*") do (
-        if exist "%%D\python.exe" set "PY="%%D\python.exe""
-    )
+exit /b 0
+
+:instalar_python
+echo.
+echo ============================================================
+echo   Instalando o Python (uma vez so neste PC, alguns minutos)
+echo   Nao feche esta janela.
+echo ============================================================
+where winget >nul 2>&1
+if not errorlevel 1 (
+    winget install -e --id Python.Python.3.12 --scope user --silent --accept-package-agreements --accept-source-agreements
+    call :achar_python
 )
+if defined PY exit /b 0
+echo Baixando o instalador oficial do Python...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol='Tls12'; $f=Join-Path $env:TEMP 'python-instalador.exe'; Invoke-WebRequest 'https://www.python.org/ftp/python/3.12.8/python-3.12.8-amd64.exe' -OutFile $f -UseBasicParsing; Start-Process $f -ArgumentList '/quiet','InstallAllUsers=0','PrependPath=1' -Wait"
+call :achar_python
+if defined PY echo Python instalado.
 exit /b 0

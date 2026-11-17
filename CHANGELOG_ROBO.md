@@ -4,6 +4,18 @@
 
 ---
 
+## 17/11/2026 (noite, 7)
+
+### Casacaresc: Python instalado de verdade nos PCs que nao tem
+**Arquivos:** `robo-casacaresc/preparar.bat`
+
+O fix anterior nao instalava: `where python` achava o atalho da Microsoft Store (WindowsApps), que
+existe mas nao roda nada, e o preparo achava que ja havia Python. Agora cada candidato (`py -3`,
+`python`, pastas padrao) e testado rodando `import sys`. Sem Python, instala por winget e, se nao
+der, baixa o instalador oficial (3.12.8, escopo do usuario, sem admin). Mostra o progresso na tela.
+
+---
+
 ## 17/11/2026 (noite, 6)
 
 ### Casacaresc: "spawn py ENOENT" no primeiro pedido real
