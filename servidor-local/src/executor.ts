@@ -513,6 +513,7 @@ function rodarSubprocesso(
             numero_guia: parsed.numero_guia,
             senha_autorizacao: parsed.senha_autorizacao ?? undefined,
             situacao: parsed.situacao ?? "APROVADO",
+            observacao: parsed.observacao ?? undefined,
             comprovante_path: parsed.screenshot_comprovante_path ?? undefined,
             quantidade_solicitada: parsed.quantidade_solicitada ?? null,
             quantidade_autorizada: parsed.quantidade_autorizada ?? null,
@@ -627,11 +628,20 @@ async function atualizarJobComResultado(
     const cicloRobo = resultado.mes_utilizacao && resultado.data_emissao_sgu;
 
     if (!cicloRobo) {
-      console.error(
-        `[${jobId}] ⚠️ O robô não devolveu mes_utilizacao/data_emissao_sgu. ` +
-          `A máquina que executou está com código desatualizado (anterior a 10/08). ` +
-          `Calculando aqui pela mesma regra, mas ATUALIZE aquela máquina.`
-      );
+      // O adaptador do SC Saúde não devolve esses campos — o ciclo mensal da
+      // Unimed (data de emissão no SGU, mês de utilização) não existe lá.
+      // Mandar a colaboradora "atualizar a máquina" seria instrução errada.
+      if (operadoraDoJob(job) === "scsaude") {
+        console.log(
+          `[${jobId}] SC Saúde não devolve ciclo mensal — calculando aqui pela regra da clínica.`
+        );
+      } else {
+        console.error(
+          `[${jobId}] ⚠️ O robô não devolveu mes_utilizacao/data_emissao_sgu. ` +
+            `A máquina que executou está com código desatualizado (anterior a 10/08). ` +
+            `Calculando aqui pela mesma regra, mas ATUALIZE aquela máquina.`
+        );
+      }
     }
 
     const ciclo = cicloRobo
@@ -677,15 +687,20 @@ async function atualizarJobComResultado(
         mes_utilizacao: mesUtilizacao,
         ...(dataValidade ? { data_validade: dataValidade } : {}),
         status: statusGuia,
-        ...(negada
-          ? { observacoes: "Guia negada automaticamente pelo portal Unimed" }
-          : autorizacaoParcial
-            ? {
-                observacoes:
-                  `Autorização parcial: pedimos ${job.procedimento_quantidade} sessões, ` +
-                  `a Unimed liberou ${autorizadoPeloPortal}.`,
-              }
-            : {}),
+        // A observação do robô vem primeiro: hoje ela é o recado da guia em
+        // análise do SC Saúde, que é o único jeito de quem abrir a guia no CRM
+        // saber que falta a auditoria decidir e onde achá-la no portal.
+        ...(resultado.observacao
+          ? { observacoes: resultado.observacao }
+          : negada
+            ? { observacoes: "Guia negada automaticamente pelo portal Unimed" }
+            : autorizacaoParcial
+              ? {
+                  observacoes:
+                    `Autorização parcial: pedimos ${job.procedimento_quantidade} sessões, ` +
+                    `a Unimed liberou ${autorizadoPeloPortal}.`,
+                }
+              : {}),
       })
       .select("id")
       .maybeSingle();
@@ -762,7 +777,11 @@ async function atualizarJobComResultado(
         situacao_unimed: resultado.situacao ?? null,
         comprovante_path: resultado.comprovante_path ?? null,
         // Job segue como sucesso — a guia existe. A mensagem é para a recepção
-        // ver na tela que o saldo é menor do que o pedido.
+        // ver na tela que o saldo é menor do que o pedido, ou que a guia foi
+        // para análise e precisa de acompanhamento.
+        ...(resultado.observacao
+          ? { erro_mensagem: resultado.observacao }
+          : {}),
         ...(autorizacaoParcial
           ? {
               erro_mensagem:

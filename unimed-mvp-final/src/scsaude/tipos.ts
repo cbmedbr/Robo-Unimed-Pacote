@@ -83,6 +83,15 @@ export interface ResultadoScSaude {
   situacao?: SituacaoScSaude;
   /** Críticas que o portal exibiu (SCAUT_xxxx). Alerta não impede autorização. */
   alertas?: string[];
+  /**
+   * Recado para quem vai ler isto no CRM, em português de gente.
+   *
+   * Existe porque um desfecho pode ser **sucesso e ainda assim precisar de
+   * alguém**: a guia em análise foi aceita pela operadora, não tem senha, e
+   * alguém precisa acompanhar. `erro_mensagem` não serve para isso — ela diz
+   * que algo deu errado, e aqui não deu.
+   */
+  observacao?: string;
   comprovante_path?: string | null;
   erro_codigo?: string;
   erro_mensagem?: string;

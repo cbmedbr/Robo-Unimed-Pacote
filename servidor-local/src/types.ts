@@ -64,6 +64,14 @@ export interface ResultadoRobo {
   data_emissao_sgu?: string;
   mes_utilizacao?: string;
   comprovante_path?: string;
+  /**
+   * Recado do robô para quem lê no CRM, num desfecho que deu certo.
+   *
+   * Nasceu da guia em análise do SC Saúde: o pedido foi aceito, não há senha,
+   * e alguém precisa acompanhar. Isso não é erro, então não cabe em
+   * `erro_mensagem` — mas precisa aparecer para a pessoa.
+   */
+  observacao?: string;
   erro_codigo?: string;
   erro_mensagem?: string;
   dump_html_path?: string;

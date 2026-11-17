@@ -489,6 +489,7 @@ Layout da linha (confirmado em 21/08/2026 contra guias reais):
 | Código | Causa |
 |---|---|
 | `FINALIZACAO_FALHOU` | Portal rejeitou com erro de validação |
+| `GUIA_NEGADA` | (SC Saúde) A operadora negou a solicitação |
 | `AUTORIZADOR_INDISPONIVEL` | O SGU não conseguiu falar com o **Autorizador** — o serviço externo que ele chama para validar a guia. Não é erro de preenchimento, e **não significa portal fora do ar**: em 17/11/2026 a colaboradora viu essa tela com o portal normal. **Causa desconhecida.** Descartados com dados: portal fora do ar (outras guias passaram nos mesmos minutos), intercâmbio (a operadora da carteira tem 53 aprovações em 60 dias) e o médico solicitante (4 aprovações com o mesmo CRM). Falhas opacas assim já se resolveram na 2ª ou 3ª tentativa para o mesmo paciente. Conferir se a guia já foi criada antes de repetir (risco de duplicar); se insistir, fazer a guia à mão — se a faixa aparecer para a pessoa também, é chamado na Unimed |
 | `GUIA_NAO_GERADA` | Número da guia não capturado |
 

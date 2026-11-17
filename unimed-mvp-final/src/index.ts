@@ -11,7 +11,7 @@ import { executarSessao } from "./executar_sessao";
 import { DadosExecucao } from "./execucao/tipos";
 import { carregarConfig } from "./utils/config";
 import { logger } from "./utils/logger";
-import { InputAutorizacaoScSaude } from "./scsaude/tipos";
+import { InputAutorizacaoScSaude, ResultadoScSaude } from "./scsaude/tipos";
 import { carregarConfigScSaude } from "./scsaude/config";
 import { executarAutorizacaoScSaude } from "./scsaude/autorizacao";
 
@@ -60,8 +60,54 @@ async function comandoScSaude(inputPath: string): Promise<void> {
   logger.info({ paciente: input.paciente?.nome_completo }, "iniciando autorização SC Saúde");
 
   const resultado = await executarAutorizacaoScSaude(input, config);
-  console.log(JSON.stringify(resultado, null, 2));
+  console.log(JSON.stringify(traduzirParaOServidor(resultado, input), null, 2));
   process.exit(resultado.sucesso ? 0 : 1);
+}
+
+/**
+ * Traduz o resultado do SC Saúde para o contrato que o servidor lê.
+ *
+ * O adaptador fala a língua do portal dele (`senha`, `comprovante_path`,
+ * situação `AUTORIZADA`). O `executor.ts` do servidor lê outra coisa
+ * (`senha_autorizacao`, `screenshot_comprovante_path`, situação `APROVADO`) —
+ * ele nasceu para a Unimed. Sem esta tradução o job até era gravado, mas a
+ * senha e o comprovante se perdiam no caminho, em silêncio.
+ *
+ * **A situação é o que importa aqui.** `EM_ANALISE` é exatamente o valor que o
+ * servidor já reconhece para criar a guia com `status = em_analise` e marcar o
+ * job como `sucesso_em_analise`. É assim que a guia do SC Saúde que foi para
+ * auditoria chega ao CRM para conferência humana, em vez de virar erro.
+ */
+function traduzirParaOServidor(
+  r: ResultadoScSaude,
+  input: InputAutorizacaoScSaude
+): Record<string, unknown> {
+  const situacao =
+    r.situacao === "EM_ANALISE" ? "EM_ANALISE" : r.situacao === "NEGADA" ? "NEGADA" : "APROVADO";
+
+  return {
+    sucesso: r.sucesso,
+    situacao,
+    numero_guia: r.numero_guia ?? null,
+    senha_autorizacao: r.senha ?? null,
+    validade_senha: r.validade_senha ?? null,
+    data_solicitacao: r.data_solicitacao ?? null,
+    screenshot_comprovante_path: r.comprovante_path ?? null,
+    // Quantidade: o SC Saúde não mostra "autorizada" separada do pedido na
+    // tela de captura, e em análise não há nada autorizado ainda. Mandar o
+    // pedido e deixar `autorizada` nula é o que o servidor já sabe tratar —
+    // ele cai para o pedido e avisa no log.
+    quantidade_solicitada: input.procedimento?.quantidade ?? null,
+    quantidade_autorizada: null,
+    alertas: r.alertas ?? [],
+    observacao: r.observacao ?? null,
+    erro_codigo: r.erro_codigo ?? null,
+    // `mensagem` é o nome que o servidor procura no caminho de erro.
+    mensagem: r.erro_mensagem ?? null,
+    erro_mensagem: r.erro_mensagem ?? null,
+    screenshot_path: r.comprovante_path ?? null,
+    duracao_ms: r.duracao_ms ?? null,
+  };
 }
 
 async function comandoAutorizar(inputPath: string, dryRun: boolean): Promise<void> {

@@ -728,7 +728,52 @@ Outro detalhe do caso real: a indicação clínica estava como `CID 11. 6A02.0` 
 CID-10. O portal aceita. Vale lembrar que o CRM tem 29 pacientes com código CID-11, que a
 validação do robô da Unimed recusa.
 
-### 13.5 O que continua fora
+### 13.5 O robô entrega a guia em análise para conferência humana
+
+Implementado em 17/11/2026.
+
+**A guia em análise é sucesso, não erro.** A solicitação chegou à operadora e a guia existe no
+portal — falta a auditoria decidir. Como a análise é o caminho *normal* do ABA (13.1), tratá-la
+como falha encheria o CRM de alarme em todo pedido atípico.
+
+O desfecho vai para o CRM no mesmo estado que a Unimed já produz:
+
+| Onde | Valor |
+|---|---|
+| `unimed_aprovacao_jobs.status` | `sucesso_em_analise` |
+| `unimed_aprovacao_jobs.situacao_unimed` | `EM_ANALISE` |
+| `guias.status` | `em_analise` |
+| `guias.observacoes` | recado em português, com o nº da guia ou como achá-la |
+
+**Como a situação é reconhecida.** Texto sozinho não basta: "Em análise" aparece no filtro de
+situação, que está na tela antes de qualquer coisa ser enviada. O marcador é a combinação:
+
+> o botão **Solicitar Autorização** sumiu **e** a tela mostra um dos estados de análise.
+
+Na guia em análise esse botão não existe (13.3) — enquanto ele estiver lá, a pessoa ainda está
+conferindo e o robô não conclui nada.
+
+**Os quatro estados que não são espera** (seção 6) entram como `EM_ANALISE` também, mas o
+recado diz o que fazer, porque ninguém deve ficar esperando por eles:
+
+| Estado | Recado |
+|---|---|
+| Aguardando justificativa técnica | responder por *Mensagens Guia* |
+| Aguardando documentação | anexar por *Anexar Documentos* |
+| Aguardando retorno do prestador | ver *Mensagens Guia* |
+| Perícia | prazo é da operadora |
+
+**O número da guia é lido por rótulo e pode vir nulo.** Essa tela nunca foi vista em execução
+real, só em modo somente-leitura. Sem número, o recado manda procurar em *Meus Atendimentos*
+pelo beneficiário e pela data. Falhar numa guia que a operadora já recebeu seria pior.
+
+**O que o robô não faz:** acompanhar. Ele não volta para ver se a auditoria decidiu — consultar
+guia em análise no SC Saúde continua fora (13.6). A entrega é para uma pessoa.
+
+Verificação: `npm run verifica-scsaude` em `unimed-mvp-final/` roda o classificador contra oito
+telas sintéticas, incluindo a armadilha do "Em análise" no filtro.
+
+### 13.6 O que continua fora
 
 **A captura em si.** O texto do portal diz onde ela acontece:
 

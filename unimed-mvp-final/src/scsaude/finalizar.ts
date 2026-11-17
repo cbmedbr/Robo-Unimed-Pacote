@@ -74,19 +74,25 @@ async function aguardarConferenciaHumana(
       };
     }
 
-    const texto = (await page.evaluate(() => document.body?.innerText ?? "").catch(() => "")).replace(
-      /\s+/g,
-      " "
-    );
+    const estado = await lerSituacaoNaTela(page);
 
-    if (/Guia\s+Capturada/i.test(texto)) {
+    if (estado?.situacao === "AUTORIZADA") {
       logger.info("a pessoa concluiu a solicitação — lendo a guia");
       const dados = await lerGuiaCapturada(page, config);
       const print = await capturar(page, config, `scsaude-guia-${dados.numero_guia ?? jobId}`);
       return { sucesso: true, situacao: "AUTORIZADA", comprovante_path: print, ...dados };
     }
 
-    if (/Guia\s+Negada|Solicita[çc][ãa]o\s+Negada/i.test(texto)) {
+    // A guia pode ir para análise também pelas mãos da pessoa — e este é o
+    // caminho que roda de verdade, porque a conferência manual é o padrão.
+    // Sem este ramo o robô ficava girando até estourar os minutos de espera e
+    // devolvia CONFERENCIA_NAO_CONCLUIDA: a guia existia na operadora e o CRM
+    // não ficava sabendo.
+    if (estado?.situacao === "EM_ANALISE") {
+      return resultadoEmAnalise(page, config, jobId, estado.pendencia, []);
+    }
+
+    if (estado?.situacao === "NEGADA") {
       return {
         sucesso: false,
         situacao: "NEGADA",
@@ -148,30 +154,18 @@ export async function solicitarEGerarGuia(
   // --- modal "Resultado da Autorização" ---
   const situacao = await lerResultado(page, config);
 
-  if (situacao === "NEGADA") {
+  if (situacao.situacao === "NEGADA") {
     return {
       sucesso: false,
-      situacao,
+      situacao: "NEGADA",
       alertas,
       erro_codigo: "GUIA_NEGADA",
       erro_mensagem: "O SC Saúde negou a solicitação.",
     };
   }
 
-  if (situacao === "EM_ANALISE") {
-    // Caminho ainda não mapeado (nenhuma das autorizações reais caiu nele).
-    // Não inventa sucesso: devolve para alguém olhar, com o estado preservado.
-    const print = await capturar(page, config, `scsaude-em-analise-${jobId}`);
-    return {
-      sucesso: false,
-      situacao,
-      alertas,
-      comprovante_path: print,
-      erro_codigo: "GUIA_EM_ANALISE",
-      erro_mensagem:
-        "A guia caiu em análise. Esse caminho ainda não está automatizado: a captura precisa ser " +
-        "feita no portal quando a autorização sair.",
-    };
+  if (situacao.situacao === "EM_ANALISE") {
+    return resultadoEmAnalise(page, config, jobId, situacao.pendencia, alertas);
   }
 
   // --- Finalizar e Gerar a Guia ---
@@ -209,6 +203,156 @@ export async function solicitarEGerarGuia(
 
 // ---------------------------------------------------------------------------
 
+/**
+ * Situacoes que o portal pode mostrar depois que a solicitacao foi enviada.
+ *
+ * Os rotulos saem do filtro de situacao do portal (SCSAUDE_PORTAL.md, secao 6).
+ * Quatro deles **nao sao espera**: a guia parou porque falta alguma coisa do
+ * nosso lado. Eles vao para conferencia humana igual a analise, mas com texto
+ * dizendo o que fazer — tratar tudo como "em analise" faria a clinica esperar
+ * por algo que nunca chega sozinho.
+ */
+const PENDENCIAS: { regex: RegExp; oQueFazer: string }[] = [
+  {
+    regex: /Aguardando\s+justificativa\s+t[ée]cnica/i,
+    oQueFazer:
+      "a auditoria pediu justificativa técnica. Responda por *Mensagens Guia*, dentro da guia.",
+  },
+  {
+    regex: /Aguardando\s+documenta[çc][ãa]o/i,
+    oQueFazer: "a auditoria pediu documento. Use *Anexar Documentos*, dentro da guia.",
+  },
+  {
+    regex: /Aguardando\s+retorno\s+do\s+prestador/i,
+    oQueFazer: "a auditoria está esperando retorno nosso. Veja *Mensagens Guia*, dentro da guia.",
+  },
+  { regex: /Per[íi]cia/i, oQueFazer: "a guia foi para perícia. O prazo é da operadora." },
+];
+
+/**
+ * Le a situacao da guia na tela aberta.
+ *
+ * Devolve `null` quando a tela ainda nao decidiu nada — e o que permite usar
+ * isto dentro de um laco de espera.
+ *
+ * **Por que o botao entra na conta:** o texto "Em analise" sozinho nao serve
+ * de marcador. Antes de enviar, a tela e o formulario, que tem *Solicitar
+ * Autorizacao*; na guia em analise esse botao some (SCSAUDE_PORTAL.md, 13.3).
+ * Exigir a ausencia dele evita dar a guia por enviada enquanto a pessoa ainda
+ * esta conferindo.
+ */
+export async function lerSituacaoNaTela(
+  page: Page
+): Promise<{ situacao: SituacaoScSaude; pendencia: string | null } | null> {
+  const texto = (await page.evaluate(() => document.body?.innerText ?? "").catch(() => "")).replace(
+    /\s+/g,
+    " "
+  );
+
+  if (/Guia\s+Capturada/i.test(texto)) return { situacao: "AUTORIZADA", pendencia: null };
+  if (/Guia\s+Negada|Solicita[çc][ãa]o\s+Negada/i.test(texto)) {
+    return { situacao: "NEGADA", pendencia: null };
+  }
+
+  const aindaPodeSolicitar = await page
+    .locator('a:has-text("Solicitar Autorização"), button:has-text("Solicitar Autorização")')
+    .first()
+    .isVisible()
+    .catch(() => false);
+
+  if (aindaPodeSolicitar) return null;
+
+  for (const { regex, oQueFazer } of PENDENCIAS) {
+    if (regex.test(texto)) return { situacao: "EM_ANALISE", pendencia: oQueFazer };
+  }
+
+  if (/Em\s+an[áa]lise|Guia\s+em\s+an[áa]lise/i.test(texto)) {
+    return { situacao: "EM_ANALISE", pendencia: null };
+  }
+
+  if (/Guia\s+Autorizada/i.test(texto)) return { situacao: "AUTORIZADA", pendencia: null };
+
+  return null;
+}
+
+/**
+ * Monta o resultado de uma guia que foi para analise.
+ *
+ * **Isto e sucesso, nao erro.** A solicitacao chegou a operadora e a guia
+ * existe no portal — so falta a auditoria decidir. Para a sessao ABA
+ * (`13107208`) a analise e o caminho NORMAL, nao a excecao
+ * (SCSAUDE_PORTAL.md, 13.1): devolver erro encheria o CRM de alarme falso em
+ * todo pedido atipico.
+ *
+ * O desfecho vai para o CRM como `EM_ANALISE`, o mesmo estado que a Unimed ja
+ * produz — a guia nasce em `guias` com `status = em_analise` e fica esperando
+ * alguem conferir. O robo nao acompanha: consultar guia em analise no SC Saude
+ * nao esta automatizado.
+ */
+async function resultadoEmAnalise(
+  page: Page,
+  config: ConfigScSaude,
+  jobId: string,
+  pendencia: string | null,
+  alertas: string[]
+): Promise<ResultadoScSaude> {
+  const numero = await lerNumeroDaGuia(page);
+  const print = await capturar(page, config, `scsaude-em-analise-${numero ?? jobId}`);
+
+  const comoAchar = numero
+    ? `A guia é a nº ${numero}.`
+    : "Não consegui ler o número da guia na tela — procure em *Meus Atendimentos* pelo " +
+      "beneficiário e pela data de hoje.";
+
+  logger.info({ jobId, numero, pendencia }, "guia foi para análise");
+
+  return {
+    sucesso: true,
+    situacao: "EM_ANALISE",
+    numero_guia: numero,
+    // Em analise nao existe senha: e justamente o marcador mais confiavel do
+    // estado (SCSAUDE_PORTAL.md, 13.2). Explicito para ninguem ler a ausencia
+    // como falha de leitura.
+    senha: null,
+    validade_senha: null,
+    alertas,
+    comprovante_path: print,
+    observacao:
+      "A guia foi enviada e está EM ANÁLISE na operadora — não há senha ainda. " +
+      comoAchar +
+      (pendencia
+        ? ` ATENÇÃO, isto não é só esperar: ${pendencia}`
+        : " Não é preciso refazer o pedido; alguém precisa acompanhar no portal até a auditoria decidir."),
+  };
+}
+
+/**
+ * Numero da guia, por rotulo, sem falhar quando nao acha.
+ *
+ * A tela da guia em analise nunca foi vista em execucao real — so em modo
+ * somente-leitura, em 27/10/2026. Entao aqui nao se inventa seletor: tenta os
+ * rotulos conhecidos e, nao achando, devolve `null`, e a mensagem manda
+ * procurar pelo beneficiario. Guia sem numero e pior de achar, mas e melhor do
+ * que o robo falhar numa guia que a operadora ja recebeu.
+ */
+export async function lerNumeroDaGuia(page: Page): Promise<string | null> {
+  const texto = (await page.evaluate(() => document.body?.innerText ?? "").catch(() => "")).replace(
+    /[ \t]+/g,
+    " "
+  );
+
+  for (const rotulo of [
+    /N[úu]mero da Guia\s*:?\s*([0-9]{4,})/i,
+    /N[ºo°]\s*Guia\s*:?\s*([0-9]{4,})/i,
+    /Guia\s*:?\s*([0-9]{8,})/i,
+  ]) {
+    const m = texto.match(rotulo);
+    if (m) return m[1].trim();
+  }
+
+  return null;
+}
+
 async function lerEFecharAlertas(page: Page): Promise<string[]> {
   const modal = page.locator('.modal:visible:has-text("A guia solicitada possui alertas")').first();
 
@@ -238,16 +382,15 @@ async function lerEFecharAlertas(page: Page): Promise<string[]> {
  * Procura primeiro no modal "Resultado da Autorização"; se ele já tiver sido
  * fechado, cai para a faixa no topo da página, que carrega o mesmo estado.
  */
-async function lerResultado(page: Page, config: ConfigScSaude): Promise<SituacaoScSaude> {
+async function lerResultado(
+  page: Page,
+  config: ConfigScSaude
+): Promise<{ situacao: SituacaoScSaude; pendencia: string | null }> {
   const inicio = Date.now();
 
   while (Date.now() - inicio < config.navegacaoTimeout) {
-    const corpo = await page.evaluate(() => document.body?.innerText ?? "").catch(() => "");
-    const texto = corpo.replace(/\s+/g, " ");
-
-    if (/Guia\s+Autorizada/i.test(texto)) return "AUTORIZADA";
-    if (/Guia\s+(em\s+)?An[áa]lise|Em\s+An[áa]lise/i.test(texto)) return "EM_ANALISE";
-    if (/Guia\s+Negada|Solicita[çc][ãa]o\s+Negada/i.test(texto)) return "NEGADA";
+    const estado = await lerSituacaoNaTela(page);
+    if (estado) return estado;
 
     await page.waitForTimeout(1500);
   }

@@ -4,6 +4,61 @@
 
 ---
 
+## 17/11/2026 (tarde)
+
+### Guia do SC Saúde que vai para análise agora chega ao CRM para conferência
+**Arquivos:** `unimed-mvp-final/src/scsaude/{finalizar,tipos}.ts`,
+`unimed-mvp-final/src/index.ts`, `servidor-local/src/{executor,types}.ts`
+
+Pedido da operação: se uma guia do SC Saúde ficar em análise, ela tem que ser entregue para
+alguém conferir depois — o robô não consulta guia em análise naquele portal.
+
+Três buracos no caminho, todos fechados:
+
+**1. O caminho que roda de verdade não detectava análise.** A conferência manual é o padrão
+(`conferenciaManual`), e o laço de espera dela só procurava "Guia Capturada" e "Guia Negada".
+Uma guia que fosse para auditoria deixava o robô girando até estourar os minutos e devolvia
+`CONFERENCIA_NAO_CONCLUIDA` — a guia existia na operadora e o CRM não ficava sabendo. O ramo de
+análise que existia estava só no caminho automático, que **não é o que roda**.
+
+**2. Análise era tratada como erro.** O ramo automático devolvia `sucesso: false` com
+`GUIA_EM_ANALISE`. Mas análise é o caminho NORMAL do ABA (`13107208`, SCSAUDE_PORTAL.md 13.1):
+isso encheria o CRM de alarme falso em todo pedido atípico. Agora é sucesso com
+`situacao: EM_ANALISE` — o mesmo estado que a Unimed já produz, que faz a guia nascer com
+`status = em_analise` e o job com `sucesso_em_analise`.
+
+**3. O resultado do SC Saúde não casava com o contrato que o servidor lê.** O adaptador fala a
+língua do portal dele (`senha`, `comprovante_path`, situação `AUTORIZADA`); o `executor.ts` lê
+`senha_autorizacao`, `screenshot_comprovante_path`, situação `APROVADO` — ele nasceu para a
+Unimed. **A senha e o comprovante se perdiam em silêncio.** Entrou um tradutor explícito na
+saída do comando `scsaude`.
+
+**Como a situação é reconhecida, sem cair em armadilha:** o texto "Em análise" sozinho não
+serve — ele está no filtro de situação, visível antes de qualquer envio. O marcador é o botão
+*Solicitar Autorização* ter sumido **e** a tela mostrar um estado de análise. Enquanto o botão
+estiver lá, a pessoa ainda está conferindo.
+
+**Os quatro estados que não são espera** (aguardando justificativa, aguardando documentação,
+aguardando retorno, perícia) entram como `EM_ANALISE` mas com recado dizendo o que fazer —
+tratar tudo como "em análise" faria a clínica esperar por algo que nunca chega sozinho.
+
+O número da guia é lido por rótulo e **pode vir nulo**: essa tela nunca rodou de verdade, só
+foi vista em modo somente-leitura. Sem número, o recado manda procurar pelo beneficiário. Não
+se inventou seletor.
+
+**Verificado:** `npm run verifica-scsaude` roda o classificador contra oito telas sintéticas,
+montadas do que o mapeamento registrou — formulário antes de enviar, a armadilha do filtro,
+guia em análise, os três "aguardando", perícia, capturada e negada. Oito de oito.
+
+De quebra, o servidor parou de mandar "ATUALIZE aquela máquina" quando um job do SC Saúde dá
+certo: aquele aviso é sobre o ciclo mensal da Unimed, que não existe no SC Saúde.
+
+**O que NÃO foi feito:** o robô não acompanha a guia depois. Ninguém volta ao portal para ver
+se a auditoria decidiu — a entrega é para uma pessoa, e o CRM precisa de uma tela que liste as
+guias em `em_analise`.
+
+---
+
 ## 17/11/2026
 
 ### O robô lia um atributo do HTML e chamava de erro da tela
