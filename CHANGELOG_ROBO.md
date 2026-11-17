@@ -4,6 +4,18 @@
 
 ---
 
+## 17/11/2026 (noite, 6)
+
+### Casacaresc: "spawn py ENOENT" no primeiro pedido real
+**Arquivos:** `robo-casacaresc/preparar.bat`, `servidor-local/src/{casacaresc-job,executor}.ts`, `DOCUMENTACAO_ROBO.md`
+
+O PC nao tinha Python e o servidor tentou chamar `py` do PATH. Agora o `preparar.bat` instala o
+Python sozinho (winget, escopo do usuario) quando falta e grava o caminho em `.python-path`; o
+servidor nunca mais chama `py` do PATH e, sem Python, recusa o job com `PYTHON_AUSENTE` e a instrucao
+de reabrir o `iniciar.bat`.
+
+---
+
 ## 17/11/2026 (noite, 5)
 
 ### Inicio mostra os planos atendidos

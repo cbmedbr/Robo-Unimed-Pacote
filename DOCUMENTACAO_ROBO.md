@@ -713,7 +713,7 @@ Robô **Python + Playwright** em `robo-casacaresc/`, disparado pelo mesmo servid
   Quantidade = `procedimento_quantidade` calculada pelo CRM.
 - **Execução:** `python robo.py --input <json>`, cwd `robo-casacaresc/`, timeout
   `CASACARESC_TIMEOUT_MS` (25 min). O Python vem de `robo-casacaresc/.python-path`, gravado pelo
-  `preparar.bat`.
+  `preparar.bat` (que instala o Python via winget quando falta). Sem Python o job falha com `PYTHON_AUSENTE`.
 - **Fluxo no portal:** login → Nova Guia Eletiva SP/SADT → carteirinha + lupa → solicitante
   (psicólogo, via "Selecionar outro..." se preciso) → CBO 251510 Psicólogo clínico → procedimento +
   quantidade → executante LUCIANO NOCETI E VIEIRA - MATRIZ → sem anexo → resumo.

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { supabase } from "./supabase.js";
@@ -42,14 +42,31 @@ export interface InputCasacaresc {
   procedimento: { codigo: string; categoria: string; quantidade: number };
 }
 
-/** Python que o `preparar.bat` gravou neste PC. Sem ele, cai no `py`/`python` do PATH. */
-export function pythonCasacaresc(): { cmd: string; args: string[] } {
+/**
+ * Python que o `preparar.bat` gravou neste PC (`.python-path`). Sem ele, procura
+ * nas pastas onde o instalador costuma pôr. Não usa `py`/`python` do PATH: o
+ * servidor sobe numa janela aberta antes da instalação e não enxerga o PATH novo
+ * (foi o "spawn py ENOENT" de 17/11/2026).
+ */
+export function pythonCasacaresc(): { cmd: string; args: string[] } | null {
   const arq = path.join(PASTA_CASACARESC, ".python-path");
   if (existsSync(arq)) {
-    const exe = readFileSync(arq, "utf8").trim();
+    const exe = readFileSync(arq, "utf8").trim().replace(/^"|"$/g, "");
     if (exe && existsSync(exe)) return { cmd: exe, args: [] };
   }
-  return process.platform === "win32" ? { cmd: "py", args: ["-3"] } : { cmd: "python3", args: [] };
+  const bases = [
+    process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, "Programs", "Python") : "",
+    process.env.ProgramFiles ?? "",
+  ].filter(Boolean);
+  for (const base of bases) {
+    if (!existsSync(base)) continue;
+    const pastas = readdirSync(base).filter((n) => /^Python3\d+$/i.test(n)).sort().reverse();
+    for (const p of pastas) {
+      const exe = path.join(base, p, "python.exe");
+      if (existsSync(exe)) return { cmd: exe, args: [] };
+    }
+  }
+  return process.platform === "win32" ? null : { cmd: "python3", args: [] };
 }
 
 export async function jobParaInputCasacaresc(
@@ -60,6 +77,14 @@ export async function jobParaInputCasacaresc(
       "CASACARESC_SEM_SENHA",
       "Este computador ainda não tem a senha do portal Casacaresc. " +
         "Feche a janela do robô e abra o iniciar.bat de novo: ele pede a senha."
+    );
+  }
+
+  if (!pythonCasacaresc()) {
+    throw new ErroPreparoCasacaresc(
+      "PYTHON_AUSENTE",
+      "Este computador ainda não tem o Python, que o robô da Casacaresc usa. " +
+        "Feche a janela do robô e abra o iniciar.bat de novo: ele instala sozinho."
     );
   }
 

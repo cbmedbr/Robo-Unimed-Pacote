@@ -11,9 +11,21 @@ where py >nul 2>&1 && set "PY=py -3"
 if not defined PY (
     where python >nul 2>&1 && set "PY=python"
 )
+rem Python instalado so para o usuario nem sempre esta no PATH desta janela.
+if not defined PY call :achar_python
+if not defined PY (
+    where winget >nul 2>&1
+    if not errorlevel 1 (
+        echo.
+        echo Instalando o Python para o plano Casacaresc. Uma vez so neste PC,
+        echo pode levar alguns minutos. Nao feche a janela.
+        winget install -e --id Python.Python.3.12 --scope user --silent --accept-package-agreements --accept-source-agreements >nul 2>&1
+        call :achar_python
+    )
+)
 if not defined PY (
     echo.
-    echo AVISO: Python nao esta instalado neste PC. O plano Casacaresc nao vai
+    echo AVISO: nao consegui instalar o Python neste PC. O plano Casacaresc nao vai
     echo funcionar aqui ate instalar ^(https://www.python.org/downloads/ , marcar
     echo "Add Python to PATH"^). Unimed e SC Saude seguem normais.
     exit /b 0
@@ -42,5 +54,16 @@ if errorlevel 1 (
     echo Pulei. Na proxima vez que abrir o iniciar.bat eu pergunto de novo.
 ) else (
     echo Senha do Casacaresc gravada neste PC.
+)
+exit /b 0
+
+:achar_python
+for /d %%D in ("%LOCALAPPDATA%\Programs\Python\Python3*") do (
+    if exist "%%D\python.exe" set "PY="%%D\python.exe""
+)
+if not defined PY (
+    for /d %%D in ("%ProgramFiles%\Python3*") do (
+        if exist "%%D\python.exe" set "PY="%%D\python.exe""
+    )
 )
 exit /b 0
