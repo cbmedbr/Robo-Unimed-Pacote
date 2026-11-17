@@ -459,9 +459,9 @@ function rodarSubprocesso(
     // Casacaresc é o robô Python em robo-casacaresc/. Ele lê a própria senha do
     // .env da pasta dele (criado pelo preparar.bat) e devolve o mesmo
     // "=== RESULTADO ===" que o robô TypeScript, então o resto daqui vale igual.
-    const py = pythonCasacaresc();
+    const py = operadora === "casacaresc" ? pythonCasacaresc() : null;
     const [exe, argv, pasta] =
-      operadora === "casacaresc"
+      operadora === "casacaresc" && py
         ? [py.cmd, [...py.args, "-u", path.join(PASTA_CASACARESC, "robo.py"), "--input", inputPath], PASTA_CASACARESC]
         : [process.execPath, [tsxCli, scriptPath, comando, "--input", inputPath], config.roboCaminho];
 
