@@ -1,6 +1,6 @@
 @echo off
 rem Chamado pelo iniciar-servidor.bat da raiz, a cada inicio.
-rem Prepara o robo Casacaresc neste PC (Python, dependencias, senha).
+rem Prepara o plano Casacaresc neste PC (Python, dependencias, senha).
 rem NUNCA impede o servidor de subir: se algo faltar, so avisa. O robo Unimed
 rem e o SC Saude continuam funcionando normalmente.
 setlocal EnableDelayedExpansion
@@ -13,7 +13,7 @@ if not defined PY (
 )
 if not defined PY (
     echo.
-    echo AVISO: Python nao esta instalado neste PC. O robo CASACARESC nao vai
+    echo AVISO: Python nao esta instalado neste PC. O plano Casacaresc nao vai
     echo funcionar aqui ate instalar ^(https://www.python.org/downloads/ , marcar
     echo "Add Python to PATH"^). Unimed e SC Saude seguem normais.
     exit /b 0
@@ -22,17 +22,17 @@ if not defined PY (
 rem Caminho exato do Python, para o servidor chamar o robo sem depender do PATH.
 %PY% -c "import sys;print(sys.executable)" > ".python-path" 2>nul
 
-echo Conferindo dependencias do robo Casacaresc...
+echo Conferindo plano Casacaresc...
 %PY% -m pip install -q --disable-pip-version-check -r requirements.txt
 if errorlevel 1 (
-    echo AVISO: nao consegui instalar as dependencias do robo Casacaresc.
+    echo AVISO: nao consegui preparar o plano Casacaresc. Unimed e SC Saude seguem normais.
 )
 
 if exist ".env" exit /b 0
 
 echo.
 echo ============================================================
-echo   ROBO CASACARESC - configurar a senha neste PC (uma vez so)
+echo   PLANO CASACARESC - configurar a senha neste PC (uma vez so)
 echo ============================================================
 echo Senha do portal Conecta (clinica@lucianonoceti.com.br).
 echo Se nao tiver a senha agora, so aperte ENTER para pular.
