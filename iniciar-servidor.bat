@@ -3,6 +3,12 @@ setlocal EnableDelayedExpansion
 
 set "RAIZ=%~dp0"
 
+title Robo de Guias - Unimed, SC Saude, Casacaresc
+echo ============================================================
+echo   ROBO DE GUIAS - Clinica Luciano Noceti
+echo   Planos atendidos: Unimed, SC Saude, Casacaresc
+echo ============================================================
+
 rem ---------------------------------------------------------------------
 rem Pre-checagem do ambiente
 rem
@@ -100,7 +106,7 @@ rem Robo Casacaresc: prepara Python, dependencias e senha. Nunca bloqueia o serv
 if exist "%RAIZ%robo-casacaresc\preparar.bat" call "%RAIZ%robo-casacaresc\preparar.bat"
 
 echo.
-echo Iniciando servidor do Robo Unimed...
+echo Iniciando servidor do robo de guias (Unimed, SC Saude, Casacaresc)...
 cd /d "%RAIZ%servidor-local"
 npm run dev
 

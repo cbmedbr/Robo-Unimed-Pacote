@@ -4,6 +4,17 @@
 
 ---
 
+## 17/11/2026 (noite, 5)
+
+### Inicio mostra os planos atendidos
+**Arquivos:** `iniciar-servidor.bat`, `robo-casacaresc/preparar.bat`
+
+O `iniciar.bat` passou a abrir com o cabecalho "Planos atendidos: Unimed, SC Saude, Casacaresc" (e no
+titulo da janela). As mensagens do preparo falam em "plano Casacaresc", nao em "robo Casacaresc",
+para ninguem achar que o robo Unimed foi trocado. So texto, sem mudanca de comportamento.
+
+---
+
 ## 17/11/2026 (noite, 4)
 
 ### Casacaresc: guia vale 60 dias a partir da autorização
