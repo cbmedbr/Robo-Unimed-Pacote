@@ -546,6 +546,7 @@ function rodarSubprocesso(
             quantidade_autorizada: parsed.quantidade_autorizada ?? null,
             // Só o robô Casacaresc devolve: o executor usa só nesse plano.
             data_autorizacao: parsed.data_autorizacao ?? null,
+            numero_operadora: parsed.numero_operadora ?? null,
             data_validade: parsed.data_validade ?? null,
             duracao_ms: parsed.duracao_ms ?? duracao,
           });
@@ -722,7 +723,9 @@ async function atualizarJobComResultado(
     const { data: novaGuia, error: guiaErr } = await supabase
       .from("guias")
       .insert({
-        codigo_guia: resultado.numero_guia ?? null,
+        // Casacaresc: o código da guia é o Nº Guia Operadora; o Nº Guia
+        // Prestador fica no job (é por ele que a checagem de 4h pesquisa).
+        codigo_guia: (ehCasacaresc && resultado.numero_operadora) || resultado.numero_guia || null,
         paciente_id: job.paciente_id,
         medico_id: job.medico_id_snapshot,
         plano_saude_id: job.plano_saude_id_snapshot,

@@ -6,6 +6,7 @@
 
 import { spawn } from "node:child_process";
 import { operadoraDoJob } from "./operadora.js";
+import { verificarCasacarescEmAnalise, verificarUmaCasacaresc } from "./casacaresc-verificador.js";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -335,6 +336,8 @@ export async function verificarJobsEmAnalise(
   forcarTodos = false
 ): Promise<ResumoVerificacao> {
   const inicio = Date.now();
+  // Casacaresc tem portal e checagem próprios (sem prazo). Nunca lança erro.
+  await verificarCasacarescEmAnalise();
   const jobs = await listarJobsEmAnalise(forcarTodos);
 
   if (jobs.length === 0) {
@@ -421,12 +424,16 @@ export async function verificarUmaGuia(jobId: string): Promise<{
 }> {
   const { data: job, error } = await supabase
     .from("unimed_aprovacao_jobs")
-    .select("id, numero_guia_unimed, guia_id, paciente_nome_snapshot, created_at, status")
+    .select("id, numero_guia_unimed, guia_id, paciente_nome_snapshot, plano_saude_nome_snapshot, created_at, status")
     .eq("id", jobId)
     .maybeSingle();
 
   if (error || !job) {
     return { ok: false, erro: error?.message ?? "Job não encontrado" };
+  }
+  if (operadoraDoJob({ plano_saude_nome_snapshot: job.plano_saude_nome_snapshot ?? "" }) === "casacaresc") {
+    const r = await verificarUmaCasacaresc(jobId);
+    return r.ok ? { ok: true } : { ok: false, erro: r.erro };
   }
   if (job.status !== "sucesso_em_analise") {
     return { ok: false, erro: `Job não está em análise (status=${job.status})` };

@@ -486,7 +486,8 @@ def ler_recibo(page, p):
         # Sem palavra clara de desfecho: nao da para dizer que liberou.
         situacao = "EM_ANALISE"
     return {
-        "numero": numero, "senha": senha, "data_autorizacao": data_aut, "data_validade": validade,
+        "numero": numero, "numero_prestador": numero_prestador, "numero_operadora_recibo": numero_operadora,
+        "senha": senha, "data_autorizacao": data_aut, "data_validade": validade,
         "quantidade_autorizada": qtd_aut, "situacao": situacao,
     }
 
@@ -578,10 +579,164 @@ def resultado(dados):
     print(json.dumps(dados, ensure_ascii=False, indent=2), flush=True)
 
 
+
+# ------------------------------------------------------------------ consulta de guia
+URL_PESQUISA = URL_BASE + "/Guias/PesquisaGuia/PesquisaGuias"
+
+JS_LER_PESQUISA = r"""(numero) => {
+  const norm = t => (t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  for (const tab of document.querySelectorAll('table')) {
+    const linhas = Array.from(tab.querySelectorAll('tr'));
+    const cab = linhas.find(tr => /guia prestador/.test(norm(tr.textContent)) && /situa/.test(norm(tr.textContent)));
+    if (!cab) continue;
+    const nomes = Array.from(cab.children).map(c => norm(c.textContent));
+    const col = (re) => nomes.findIndex(n => re.test(n));
+    const iPrest = col(/guia prestador/), iOper = col(/guia operadora/), iSit = col(/situa/), iData = col(/data/);
+    for (const tr of linhas) {
+      if (tr === cab) continue;
+      const cels = Array.from(tr.children).map(c => (c.textContent || '').trim());
+      if (iPrest >= 0 && cels[iPrest] === String(numero)) {
+        return { situacao: cels[iSit] || '', operadora: iOper >= 0 ? cels[iOper] : '', data: iData >= 0 ? cels[iData] : '' };
+      }
+    }
+  }
+  return null;
+}"""
+
+
+def situacao_do_texto(txt):
+    t = sem_acento(txt)
+    if re.search(r"autorizad|aprovad|liberad", t):
+        return "APROVADO"
+    if re.search(r"negad|indeferid|cancelad|recusad", t):
+        return "NEGADA"
+    return "EM_ANALISE"
+
+
+def campo_depois_do_texto(page, trecho):
+    return page.locator(
+        f"xpath=//*[not(*) and contains(normalize-space(.), '{trecho}')]/following::input[not(@type='hidden')][1]"
+    ).first
+
+
+def consultar_guia(page, numero_prestador, data_solicitacao_br):
+    """Pesquisa de Guias: filtra pelo No Guia Prestador a partir da data da solicitacao.
+
+    Devolve {'situacao', 'situacao_texto', 'numero_operadora', 'data'} ou None se nao achou.
+    """
+    page.goto(URL_PESQUISA, wait_until="domcontentloaded")
+    time.sleep(2)
+    filtrar = page.locator("button:visible, a:visible").filter(has_text=re.compile(r"^\s*Filtrar\s*$", re.I))
+    campo = campo_depois_do_texto(page, "Guia Prestador")
+    if not visivel(campo) and visivel(filtrar):
+        filtrar.first.click()
+        time.sleep(1)
+    campo.wait_for(timeout=20000)
+    campo.click()
+    campo.fill(str(numero_prestador))
+
+    data = campo_depois_do_texto(page, "Data da Solicita")
+    if visivel(data):
+        data.click()
+        data.press("Control+a")
+        data.type(data_solicitacao_br, delay=40)
+        data.press("Tab")
+
+    botao = page.locator("button:visible, input[type=submit]:visible, input[type=button]:visible, a.btn:visible") \
+                .filter(has_text=re.compile(r"^\s*Pesquisar\s*$", re.I))
+    if botao.count() == 0:
+        botao = page.locator("input[value='Pesquisar']:visible")
+    botao.first.click()
+
+    limite = time.time() + 40
+    while time.time() < limite:
+        t = sem_acento(page.locator("body").inner_text())
+        if "resultados encontrados" in t or "resultado encontrado" in t or "nao existem registros" in t:
+            break
+        time.sleep(1)
+    time.sleep(1)
+    linha = page.evaluate(JS_LER_PESQUISA, str(numero_prestador))
+    if not linha:
+        return None
+    oper = re.sub(r"\D", "", linha.get("operadora") or "")
+    return {
+        "situacao": situacao_do_texto(linha.get("situacao") or ""),
+        "situacao_texto": (linha.get("situacao") or "").strip(),
+        "numero_operadora": oper or None,
+        "data": (linha.get("data") or "").strip(),
+    }
+
+
+def abrir_navegador(pw, perfil=None):
+    perfil = perfil or PERFIL
+    try:
+        ctx = pw.chromium.launch_persistent_context(str(perfil), channel="msedge", headless=HEADLESS,
+                                                    slow_mo=LENTIDAO_MS, viewport={"width": 1366, "height": 850})
+    except Exception:
+        ctx = pw.chromium.launch_persistent_context(str(perfil), channel="chrome", headless=HEADLESS,
+                                                    slow_mo=LENTIDAO_MS, viewport={"width": 1366, "height": 850})
+    page = ctx.pages[0] if ctx.pages else ctx.new_page()
+    page.set_default_timeout(30000)
+    page.on("dialog", lambda d: (log(f"Aviso do portal: {d.message}"), d.accept()))
+    return ctx, page
+
+
+def modo_verificar(caminho):
+    """Checagem das guias em analise: python robo.py --verificar lista.json
+
+    Entrada: {"guias": [{"job_id", "numero_prestador", "data_solicitacao": "AAAA-MM-DD"}]}
+    Saida: === RESULTADO === {"resultados": [{"job_id", "numero_prestador", "situacao",
+           "situacao_texto", "numero_operadora"}]}  situacao: APROVADO | NEGADA |
+           EM_ANALISE | NAO_ENCONTRADA | ERRO
+    """
+    with open(caminho, encoding="utf-8") as f:
+        guias = json.load(f).get("guias") or []
+    saida = []
+    with sync_playwright() as pw:
+        # Perfil proprio: a checagem pode cair no meio de uma autorizacao, e dois
+        # navegadores nao abrem o mesmo perfil ao mesmo tempo.
+        ctx, page = abrir_navegador(pw, PASTA / "perfil_verificacao")
+        try:
+            fazer_login(page)
+            for g in guias:
+                num = str(g.get("numero_prestador") or "")
+                try:
+                    d = datetime.strptime(str(g.get("data_solicitacao"))[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
+                    r = consultar_guia(page, num, d)
+                    if r is None:
+                        saida.append({"job_id": g.get("job_id"), "numero_prestador": num, "situacao": "NAO_ENCONTRADA",
+                                      "situacao_texto": None, "numero_operadora": None})
+                    else:
+                        saida.append({"job_id": g.get("job_id"), "numero_prestador": num, **r})
+                    log(f"Guia {num}: {saida[-1]['situacao']} {saida[-1].get('situacao_texto') or ''}")
+                except Exception as e:
+                    saida.append({"job_id": g.get("job_id"), "numero_prestador": num, "situacao": "ERRO",
+                                  "situacao_texto": str(e).splitlines()[0][:200] if str(e) else "erro",
+                                  "numero_operadora": None})
+        except Exception as e:
+            for g in guias:
+                if not any(x["job_id"] == g.get("job_id") for x in saida):
+                    saida.append({"job_id": g.get("job_id"), "numero_prestador": g.get("numero_prestador"),
+                                  "situacao": "ERRO", "situacao_texto": str(e).splitlines()[0][:200] if str(e) else "erro",
+                                  "numero_operadora": None})
+        finally:
+            try:
+                ctx.close()
+            except Exception:
+                pass
+    resultado({"resultados": saida})
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--input", required=True)
+    ap.add_argument("--input")
+    ap.add_argument("--verificar")
     args = ap.parse_args()
+    if args.verificar:
+        modo_verificar(args.verificar)
+        return
+    if not args.input:
+        ap.error("use --input pedido.json ou --verificar lista.json")
     inicio = time.time()
     etapa = "leitura_pedido"
     p = {}
@@ -614,6 +769,22 @@ def main():
                 etapa = "leitura_recibo"
                 dados = ler_recibo(recibo, p)
                 comprovante = print_tela(recibo, p, "comprovante")
+                dados["numero_operadora"] = dados.get("numero_operadora_recibo")
+                dados["situacao_texto"] = None
+                # A chave da checagem de 4 em 4 horas e o No Guia Prestador.
+                if dados.get("numero_prestador"):
+                    dados["numero"] = dados["numero_prestador"]
+                if dados["numero"]:
+                    # A Pesquisa de Guias e a fonte da situacao e do No Guia Operadora.
+                    try:
+                        r = consultar_guia(recibo, dados["numero"], datetime.now().strftime("%d/%m/%Y"))
+                        if r:
+                            dados["situacao"] = r["situacao"]
+                            dados["numero_operadora"] = r["numero_operadora"]
+                            dados["situacao_texto"] = r["situacao_texto"]
+                            log(f"Pesquisa de Guias: {r['situacao_texto']} | operadora {r['numero_operadora']}")
+                    except Exception as e:
+                        log(f"Nao consegui consultar a guia na Pesquisa de Guias: {e}")
                 try:
                     Path(comprovante).with_suffix(".html").write_text(recibo.content(), encoding="utf-8")
                 except Exception:
@@ -629,6 +800,7 @@ def main():
                 resultado({
                     "sucesso": True,
                     "numero_guia": dados["numero"],
+                    "numero_operadora": dados["numero_operadora"],
                     "senha_autorizacao": dados["senha"],
                     "situacao": dados["situacao"],
                     "observacao": obs,
