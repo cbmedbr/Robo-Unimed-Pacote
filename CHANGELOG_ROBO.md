@@ -4,6 +4,22 @@
 
 ---
 
+## 17/11/2026 (noite)
+
+### Novo robo: autorizacao de guias SP/SADT da CASACARESC
+**Arquivos:** `robo-casacaresc/*` (novo), `.gitignore`, `LEIA-ME.txt`
+
+Robo separado (Python + Playwright, roda no Edge) que pede autorizacao de psicoterapia no portal
+Benner Conecta da CASACARESC a partir de uma planilha local (`pacientes.xlsx`). Fica neste
+repositorio para pegar carona na atualizacao automatica: o `iniciar.bat` da raiz e o
+`robo-casacaresc/iniciar.bat` fazem `git pull` do repositorio inteiro, entao abrir qualquer um dos
+robos atualiza todos. Nao mexe em nada do robo Unimed/SC Saude.
+
+Dados de pacientes (`pacientes.xlsx`, `resultados/`) e o login do navegador (`perfil_navegador/`)
+ficam fora do git: repositorio publico.
+
+---
+
 ## 17/11/2026 (tarde)
 
 ### Guia do SC Saúde que vai para análise agora chega ao CRM para conferência
