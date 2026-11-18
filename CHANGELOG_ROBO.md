@@ -4,6 +4,16 @@
 
 ---
 
+## 18/11/2026
+
+### Casacaresc: codigo do TEA/ABA corrigido para 2250005286
+**Arquivos:** `servidor-local/src/casacaresc-job.ts`, `DOCUMENTACAO_ROBO.md`
+
+O codigo da sessao atipica (TEA/ABA) estava `225000286` (faltava um digito). O certo no portal da
+Casacaresc e `2250005286`. Sessao tipica (`50000470`) nao muda.
+
+---
+
 ## 17/11/2026 (noite, 13)
 
 ### Casacaresc: guia em analise e checagem de 4 em 4 horas

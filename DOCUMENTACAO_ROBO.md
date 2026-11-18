@@ -708,7 +708,7 @@ Robô **Python + Playwright** em `robo-casacaresc/`, disparado pelo mesmo servid
 - **Roteamento:** `operadoraDoJob` devolve `casacaresc` quando o plano do job casa com
   `/casa\s*caresc/` (sem acento, sem caixa). Antes disso esses pacientes caíam no default Unimed.
 - **Preparo do job:** `servidor-local/src/casacaresc-job.ts`. Categoria `tipico` → `50000470`,
-  `aba` → `225000286`; outras recusam com `PROCEDIMENTO_SEM_EQUIVALENTE`. Carteirinha do snapshot
+  `aba` → `2250005286`; outras recusam com `PROCEDIMENTO_SEM_EQUIVALENTE`. Carteirinha do snapshot
   (fallback no cadastro). Solicitante = `psicologo_executante_nome` (o psicólogo, com CRP).
   Quantidade = `procedimento_quantidade` calculada pelo CRM.
 - **Execução:** `python robo.py --input <json>`, cwd `robo-casacaresc/`, timeout
