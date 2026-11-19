@@ -421,6 +421,8 @@ export async function verificarUmaGuia(jobId: string): Promise<{
   ok: boolean;
   resumo?: ResumoVerificacao;
   erro?: string;
+  situacao?: string;
+  situacao_texto?: string | null;
 }> {
   const { data: job, error } = await supabase
     .from("unimed_aprovacao_jobs")
@@ -433,7 +435,9 @@ export async function verificarUmaGuia(jobId: string): Promise<{
   }
   if (operadoraDoJob({ plano_saude_nome_snapshot: job.plano_saude_nome_snapshot ?? "" }) === "casacaresc") {
     const r = await verificarUmaCasacaresc(jobId);
-    return r.ok ? { ok: true } : { ok: false, erro: r.erro };
+    return r.ok
+      ? { ok: true, situacao: r.situacao, situacao_texto: r.situacao_texto }
+      : { ok: false, erro: r.erro, situacao: r.situacao };
   }
   if (job.status !== "sucesso_em_analise") {
     return { ok: false, erro: `Job não está em análise (status=${job.status})` };
