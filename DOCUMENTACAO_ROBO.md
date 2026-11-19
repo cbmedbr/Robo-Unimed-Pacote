@@ -718,7 +718,9 @@ Robô **Python + Playwright** em `robo-casacaresc/`, disparado pelo mesmo servid
   (psicólogo, via "Selecionar outro..." se preciso) → CBO pelo código 251510 (Psicólogo clínico) → procedimento +
   quantidade → executante LUCIANO NOCETI E VIEIRA - MATRIZ → sem anexo → resumo.
 - **Autoriza sozinho (desde 17/11/2026, decisão da operação):** no resumo o robô confere
-  profissional, CBO, executante, carteirinha e quantidade. Se tudo bater, clica em Autorizar. Se não
+  profissional, CBO, executante, carteirinha e quantidade. A linha do item é achada pelo código do
+  procedimento (o TEA/ABA `2250005286` não tem "psicoterapia" no nome); o texto da descrição é só
+  reserva. Se tudo bater, clica em Autorizar. Se não
   bater, NÃO autoriza e falha com `RESUMO_DIVERGENTE`. Se o portal não sair do resumo em 90s, falha com
   `AUTORIZAR_SEM_RESPOSTA` (conferir no portal antes de pedir de novo). O recibo pode abrir na mesma aba
   ou em aba nova; as duas são tratadas.
@@ -744,10 +746,23 @@ Robô **Python + Playwright** em `robo-casacaresc/`, disparado pelo mesmo servid
   Operadora). Situação: "Autorizada" → APROVADO; "Negada/Indeferida/Cancelada" → NEGADA; o resto
   (ex.: "Em análise") → EM_ANALISE.
 - No CRM: `codigo_guia` = Nº Guia Operadora (senão o do prestador); `numero_guia_unimed` do job = Nº Guia
-  Prestador (chave da checagem). EM_ANALISE gera job `sucesso_em_analise` e guia `em_analise`; a aba
-  Guias Casacaresc bloqueia novo pedido do paciente enquanto isso.
+  Prestador (chave da checagem). EM_ANALISE gera job `sucesso_em_analise` e guia `em_analise`; o CRM
+  tira o paciente da Renovação, mostra a guia no Acompanhamento e bloqueia novo pedido enquanto isso.
 - **Checagem:** `servidor-local/src/casacaresc-verificador.ts`, chamada no início de
   `verificarJobsEmAnalise` (cron de 4h e botão "verificar todas") e por `verificarUmaGuia` quando o job é
-  Casacaresc. Sem prazo: segue até Autorizada (guia vira `ativa` com o nº da operadora) ou Negada (guia
-  `negada`, job `negado`). Roda `robo.py --verificar lista.json` com perfil de navegador próprio
-  (`perfil_verificacao/`) para não colidir com uma autorização em andamento.
+  Casacaresc (botão "Verificar no portal" do Acompanhamento, no CRM). Sem prazo: segue até Autorizada ou
+  Negada (guia `negada`, job `negado`). Roda `robo.py --verificar lista.json` com perfil de navegador
+  próprio (`perfil_verificacao/`) para não colidir com uma autorização em andamento.
+- **Autorizada depois (19/11/2026):** o robô abre a guia pelo link de ver da linha (número da guia ou
+  visualizar/detalhe; nunca clica em botão da linha) e lê data da autorização, validade e Qtde. Aut. com
+  o mesmo `ler_recibo` da autorização. A guia vira `ativa` com: `codigo_guia` = Nº Guia Operadora,
+  `data_emissao` = data da autorização (sem leitura: dia da checagem), `mes_utilizacao` = mês dela,
+  `data_validade` = a lida ou +60 dias, `sessoes_autorizadas` = a lida (sem leitura: a pedida). O que
+  não foi lido vira recado "Conferir no portal" nas observações da guia. Com a guia `ativa`, o gatilho
+  `tg_aplicar_guia` vincula as sessões e o paciente sai da Renovação.
+- **PC sem a senha do portal (19/11/2026):** `--verificar` devolve `SEM_SENHA` sem abrir navegador e o
+  servidor não grava nada. Antes esse PC gravava "Senha do portal Casacaresc não configurada" na guia a
+  cada 4h e a checagem não andava. No botão manual, a resposta é a instrução de abrir o `iniciar.bat`.
+- **Continua em análise:** limpa `erro_codigo`/`erro_mensagem` velhos do job (recado de checagem que falhou).
+- **Retorno do botão manual:** `POST /verificar/:jobId` devolve `situacao` (APROVADO, NEGADA, EM_ANALISE,
+  NAO_ENCONTRADA, ERRO, SEM_SENHA) e `situacao_texto`, para o CRM dizer o resultado.

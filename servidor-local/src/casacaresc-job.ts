@@ -21,7 +21,7 @@ export const PASTA_CASACARESC = path.resolve(
 );
 
 /** Procedimento no Casacaresc, por categoria do CRM (enum: a atípica é `aba`). */
-const PROCEDIMENTO_CASACARESC: Record<string, string> = {
+export const PROCEDIMENTO_CASACARESC: Record<string, string> = {
   tipico: "50000470",
   aba: "2250005286",
 };

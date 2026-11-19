@@ -4,6 +4,31 @@
 
 ---
 
+## 19/11/2026
+
+### Casacaresc: guia aprovada depois sai com os dados certos; PC sem senha nao trava a checagem
+**Arquivos:** `robo-casacaresc/robo.py`, `servidor-local/src/{casacaresc-verificador,casacaresc-job,verificador}.ts`,
+`DOCUMENTACAO_ROBO.md`
+
+Caso real: uma guia autorizada ficou parada em analise porque a checagem de 4h rodava num PC
+sem a senha do portal Casacaresc, que gravava erro e nao consultava nada. Agora esse PC pula a checagem
+(`SEM_SENHA`, nada gravado). Quando a guia aparece Autorizada, o robo abre a guia e le data da
+autorizacao, validade e quantidade; o servidor grava na guia (antes so trocava status e numero) e a
+guia vira `ativa`, o que tira o paciente da Renovacao. O botao manual devolve a situacao. Detalhes na
+secao 10.1.
+
+---
+
+### Casacaresc: resumo do TEA/ABA dava RESUMO_DIVERGENTE
+**Arquivos:** `robo-casacaresc/robo.py`, `DOCUMENTACAO_ROBO.md`
+
+Pedido TEA/ABA (`2250005286`) parava no resumo com "procedimento nao aparece no resumo": a conferencia
+procurava a linha do item pelo texto "psicoterapia"/"sess", que so existe na sessao tipica. Agora acha a
+linha pelo codigo do procedimento (so linhas sem tabela dentro); o texto fica como reserva. A
+quantidade continua sendo conferida na mesma linha. Nada foi autorizado no pedido que falhou.
+
+---
+
 ## 18/11/2026
 
 ### Casacaresc: codigo do TEA/ABA corrigido para 2250005286

@@ -379,9 +379,15 @@ def conferir_resumo(page, p):
         problemas.append("CBO nao e psicologo clinico")
     if sem_acento(EXECUTANTE)[:20] not in texto:
         problemas.append("executante nao bate")
-    linha = page.locator("tr").filter(has_text=re.compile("psicoterapia|sess", re.I))
+    # Acha a linha do item pelo codigo (vale para tipico e TEA/ABA, que nao tem
+    # "psicoterapia" no nome). So linhas sem tabela dentro, para nao pegar a linha
+    # de fora quando o portal usa tabela dentro de tabela. Texto e so reserva.
+    linhas = page.locator("tr:not(:has(tr))")
+    linha = linhas.filter(has_text=p["codigo"])
     if linha.count() == 0:
-        problemas.append("procedimento nao aparece no resumo")
+        linha = linhas.filter(has_text=re.compile("psicoterapia|sess|terapia|aba\\b", re.I))
+    if linha.count() == 0:
+        problemas.append(f"procedimento {p['codigo']} nao aparece no resumo")
     else:
         celulas = [c.strip() for c in linha.first.locator("td").all_inner_texts()]
         if str(p["quantidade"]) not in celulas:
@@ -681,17 +687,63 @@ def abrir_navegador(pw, perfil=None):
     return ctx, page
 
 
+JS_LINK_DETALHE = r"""(numero) => {
+  // So segue link de VER a guia (numero da guia ou visualizar/detalhe). Nunca
+  // clica em botao da linha: pode ser cancelar ou reenviar.
+  const norm = t => (t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  for (const tr of document.querySelectorAll('tr')) {
+    const cels = Array.from(tr.children).map(c => (c.textContent || '').trim());
+    if (!cels.includes(String(numero))) continue;
+    for (const a of tr.querySelectorAll('a[href]')) {
+      const href = a.getAttribute('href') || '';
+      if (!href || href === '#' || /^javascript:/i.test(href)) continue;
+      const rot = norm(a.textContent + ' ' + (a.title || '') + ' ' + href);
+      if (/\d{5,}/.test(a.textContent) || /visualiz|detalh|consult|exib/.test(rot)) return a.href;
+    }
+  }
+  return null;
+}"""
+
+
+def ler_detalhe_aprovada(page, numero_prestador, codigo):
+    """Guia aprovada depois: abre a guia (se a linha tiver link de ver) e le data da
+    autorizacao, validade e quantidade autorizada. Nunca levanta erro; o que nao
+    for lido volta vazio e o servidor usa o padrao."""
+    vazio = {"data_autorizacao": None, "data_validade": None, "quantidade_autorizada": None}
+    try:
+        href = page.evaluate(JS_LINK_DETALHE, str(numero_prestador))
+        if not href:
+            log(f"Guia {numero_prestador}: sem link para abrir os detalhes.")
+            return vazio
+        page.goto(href, wait_until="domcontentloaded")
+        time.sleep(2.5)
+        r = ler_recibo(page, {"codigo": codigo or ""})
+        return {k: r.get(k) for k in vazio}
+    except Exception as e:
+        log(f"Guia {numero_prestador}: nao li os detalhes ({str(e).splitlines()[0][:120] if str(e) else 'erro'}).")
+        return vazio
+
+
 def modo_verificar(caminho):
     """Checagem das guias em analise: python robo.py --verificar lista.json
 
-    Entrada: {"guias": [{"job_id", "numero_prestador", "data_solicitacao": "AAAA-MM-DD"}]}
+    Entrada: {"guias": [{"job_id", "numero_prestador", "data_solicitacao": "AAAA-MM-DD", "codigo"}]}
     Saida: === RESULTADO === {"resultados": [{"job_id", "numero_prestador", "situacao",
-           "situacao_texto", "numero_operadora"}]}  situacao: APROVADO | NEGADA |
-           EM_ANALISE | NAO_ENCONTRADA | ERRO
+           "situacao_texto", "numero_operadora", e na APROVADO tambem "data_autorizacao",
+           "data_validade", "quantidade_autorizada"}]}  situacao: APROVADO | NEGADA |
+           EM_ANALISE | NAO_ENCONTRADA | ERRO | SEM_SENHA
     """
     with open(caminho, encoding="utf-8") as f:
         guias = json.load(f).get("guias") or []
     saida = []
+    if not EMAIL or not SENHA:
+        # PC sem a senha do portal: nao abre navegador e nao conta como falha.
+        # O servidor deixa a guia como esta e outro PC (com senha) confere.
+        log("Senha do portal Casacaresc nao configurada neste PC: checagem pulada.")
+        resultado({"resultados": [{"job_id": g.get("job_id"), "numero_prestador": g.get("numero_prestador"),
+                                   "situacao": "SEM_SENHA", "situacao_texto": None, "numero_operadora": None}
+                                  for g in guias]})
+        return
     with sync_playwright() as pw:
         # Perfil proprio: a checagem pode cair no meio de uma autorizacao, e dois
         # navegadores nao abrem o mesmo perfil ao mesmo tempo.
@@ -708,6 +760,8 @@ def modo_verificar(caminho):
                         saida.append({"job_id": g.get("job_id"), "numero_prestador": num, "situacao": "NAO_ENCONTRADA",
                                       "situacao_texto": None, "numero_operadora": None})
                     else:
+                        if r["situacao"] == "APROVADO":
+                            r.update(ler_detalhe_aprovada(page, num, g.get("codigo")))
                         saida.append({"job_id": g.get("job_id"), "numero_prestador": num, **r})
                     log(f"Guia {num}: {saida[-1]['situacao']} {saida[-1].get('situacao_texto') or ''}")
                 except Exception as e:
